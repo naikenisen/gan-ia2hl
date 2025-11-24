@@ -1,0 +1,220 @@
+```{python}
+import openslide
+import matplotlib.pyplot as plt
+slide = openslide.OpenSlide("/tmp/data/gold/AHL001_HES.svs")
+# Exemple : lecture d'une région de 2000x2000 pixels
+x, y = 40000, 60000   # coordonnées microscopiques
+w, h = 1000, 1000
+img = slide.read_region((x, y), 0, (w, h)).convert("RGB")
+plt.imshow(img)      # img is a PIL Image or NumPy array
+plt.axis("off")
+print("Full resolution:", slide.dimensions)
+print("Number of levels:", slide.level_count)
+print("Level dimensions:", slide.level_dimensions)
+```
+
+```{python}
+import openslide
+import matplotlib.pyplot as plt
+
+slide = openslide.OpenSlide("/tmp/data/gold/AHL004_HES.svs")
+
+# Choisir un niveau de résolution inférieur
+# (0 = full res ; 1, 2, 3... = niveaux downsampled)
+level = 2   # par exemple
+
+# Dimensions de la lame à ce niveau
+w, h = slide.level_dimensions[level]
+
+# Extraction de l'image à ce niveau (0,0 = coin supérieur gauche)
+img = slide.read_region((0, 0), level, (w, h)).convert("RGB")
+
+plt.figure(figsize=(10, 10))
+plt.imshow(img)
+plt.axis("off")
+print(slide.associated_images.keys())
+print(slide.properties.keys())
+````
+
+```{python}
+import os
+import math
+import openslide
+import matplotlib.pyplot as plt
+
+# Dossier contenant les fichiers SVS
+folder = "/tmp/data/gold"
+
+# Récupérer la liste des fichiers SVS
+svs_files = [f for f in os.listdir(folder) if f.lower().endswith(".svs")]
+
+# Sélection du niveau downsample
+level = 2   # changer selon la taille souhaitée
+
+# Taille de la grille
+n = len(svs_files)
+cols = 4  # nombre d’images par ligne
+rows = math.ceil(n / cols)
+
+plt.figure(figsize=(4 * cols, 4 * rows))
+
+for i, filename in enumerate(svs_files):
+    path = os.path.join(folder, filename)
+    slide = openslide.OpenSlide(path)
+
+    # Lecture de l’image à faible résolution
+    w, h = slide.level_dimensions[level]
+    img = slide.read_region((0, 0), level, (w, h)).convert("RGB")
+
+    # Ajout dans la grille
+    plt.subplot(rows, cols, i + 1)
+    plt.imshow(img)
+    plt.title(os.path.splitext(filename)[0], fontsize=10)
+    plt.axis("off")
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+import os
+import math
+import openslide
+import numpy as np
+import matplotlib.pyplot as plt
+import cv2
+
+folder = "/tmp/data/gold"
+svs_files = [f for f in os.listdir(folder) if f.lower().endswith(".svs")]
+
+level = 2
+
+def compute_tissue_mask(img_rgb):
+    img_np = np.array(img_rgb)
+    hsv = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
+    sat = hsv[:, :, 1]
+    _, mask = cv2.threshold(sat, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    kernel = np.ones((5, 5), np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    return mask
+
+n = len(svs_files)
+cols = 4
+rows = 3 * math.ceil(n / cols)  # 3 rows per slide
+
+plt.figure(figsize=(5 * cols, 5 * rows))
+
+for idx, filename in enumerate(svs_files):
+    path = os.path.join(folder, filename)
+    slide = openslide.OpenSlide(path)
+
+    # low-res
+    w, h = slide.level_dimensions[level]
+    img = slide.read_region((0, 0), level, (w, h)).convert("RGB")
+
+    # mask
+    mask = compute_tissue_mask(img)
+    img_np = np.array(img)
+    img_masked = img_np.copy()
+    img_masked[mask == 0] = 255
+
+    # compute base row for this slide
+    base_row = (idx // cols) * 3      # 3 rows per slide
+    col = idx % cols
+
+    # --- Plot low-res ---
+    plt.subplot(rows, cols, base_row * cols + col + 1)
+    plt.imshow(img)
+    plt.title(f"{filename}\nLow-res", fontsize=9)
+    plt.axis("off")
+
+    # --- Plot mask ---
+    plt.subplot(rows, cols, (base_row + 1) * cols + col + 1)
+    plt.imshow(mask, cmap="gray")
+    plt.title("Tissue mask", fontsize=9)
+    plt.axis("off")
+
+    # --- Plot masked image ---
+    plt.subplot(rows, cols, (base_row + 2) * cols + col + 1)
+    plt.imshow(img_masked)
+    plt.title("Masked image", fontsize=9)
+    plt.axis("off")
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+import cv2
+import matplotlib.pyplot as plt
+import os
+import re
+from pathlib import Path
+
+# Dossiers source
+cd30_dir = Path("/home/azureuser/CD30/AHL001_CD30")
+hes_dir = Path("/home/azureuser/HES/AHL001_HES")
+
+# Nombre d'images à afficher
+n_pairs = 20
+
+def extract_coords(filename):
+    """Extrait les coordonnées x, y du nom de fichier"""
+    # Exemple: AHL001_CD30_x56832_y32768.png -> (56832, 32768)
+    match = re.search(r'_x(\d+)_y(\d+)', filename)
+    if match:
+        return (int(match.group(1)), int(match.group(2)))
+    return None
+
+# Récupérer tous les fichiers CD30 et créer un dictionnaire coords -> fichier
+cd30_files = list(cd30_dir.glob("*.png"))
+cd30_dict = {}
+for f in cd30_files:
+    coords = extract_coords(f.name)
+    if coords:
+        cd30_dict[coords] = f
+
+# Récupérer tous les fichiers HES et créer un dictionnaire coords -> fichier
+hes_files = list(hes_dir.glob("*.png"))
+hes_dict = {}
+for f in hes_files:
+    coords = extract_coords(f.name)
+    if coords:
+        hes_dict[coords] = f
+
+# Trouver les coordonnées communes (paires qui existent dans les deux)
+common_coords = sorted(set(cd30_dict.keys()) & set(hes_dict.keys()))
+
+print(f"Found {len(cd30_files)} CD30 images")
+print(f"Found {len(hes_files)} HES images")
+print(f"Found {len(common_coords)} matching pairs")
+print(f"Will display {min(n_pairs, len(common_coords))} pairs")
+
+# Afficher les paires
+for i, coords in enumerate(common_coords[:n_pairs]):
+    fig, axes = plt.subplots(1, 2, figsize=(15, 7))
+    
+    # Charger et afficher CD30
+    cd30_path = cd30_dict[coords]
+    img_cd30 = cv2.imread(str(cd30_path))
+    img_cd30 = cv2.cvtColor(img_cd30, cv2.COLOR_BGR2RGB)
+    axes[0].imshow(img_cd30)
+    axes[0].set_title(f'CD30 #{i+1}\n{cd30_path.name}', fontsize=10)
+    axes[0].axis('off')
+    
+    # Charger et afficher HES
+    hes_path = hes_dict[coords]
+    img_hes = cv2.imread(str(hes_path))
+    img_hes = cv2.cvtColor(img_hes, cv2.COLOR_BGR2RGB)
+    axes[1].imshow(img_hes)
+    axes[1].set_title(f'HES #{i+1}\n{hes_path.name}', fontsize=10)
+    axes[1].axis('off')
+    
+    plt.suptitle(f'Pair {i+1}/{min(n_pairs, len(common_coords))} - Coords: x={coords[0]}, y={coords[1]}', 
+                 fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    plt.show()
+
+print("Visualization complete!")
+```

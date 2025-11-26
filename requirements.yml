@@ -9,5 +9,4 @@ dependencies:
   - pip:
       - torch
       - torchvision
-      - some-pip-package
       - openslide-python

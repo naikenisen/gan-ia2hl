@@ -1,0 +1,13 @@
+name: ia2hl
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - openslide
+  - python-openslide
+  - numpy
+  - pip
+  - pip:
+      - torch
+      - torchvision
+      - some-pip-package

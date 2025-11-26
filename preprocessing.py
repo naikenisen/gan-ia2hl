@@ -8,6 +8,7 @@ from skimage.feature import ORB, match_descriptors
 from skimage.measure import ransac
 from skimage.transform import AffineTransform
 import warnings
+import wandb
 warnings.filterwarnings('ignore')
 
 # Configuration
@@ -24,6 +25,20 @@ hes_dir = os.path.join(output_folder, "HES")
 cd30_dir = os.path.join(output_folder, "CD30")
 os.makedirs(hes_dir, exist_ok=True)
 os.makedirs(cd30_dir, exist_ok=True)
+
+# Initialisation wandb
+wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
+wandb.init(
+    project="ia2hl-preprocessing",
+    config={
+        "patch_size": patch_size,
+        "region_size": region_size,
+        "stride_region": stride_region,
+        "tissue_threshold": tissue_threshold,
+        "jpeg_quality": jpeg_quality,
+        "lowres_level": lowres_level
+    }
+)
 
 
 def compute_tissue_mask(img_rgb):
@@ -291,9 +306,23 @@ def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
             
             print(f"    ✓ {patch_count} paires de patches extraites")
             total_patch_count += patch_count
+            
+            # Log wandb pour cette région
+            wandb.log({
+                f"{patient_id}_region_{region_index}_patches": patch_count,
+                f"{patient_id}_region_x": region_x,
+                f"{patient_id}_region_y": region_y
+            })
+            
             region_index += 1
     
     print(f"\n✓ Total: {total_patch_count} paires de patches extraites dans {region_index} sous-régions")
+    
+    # Log wandb pour ce patient
+    wandb.log({
+        f"{patient_id}_total_patches": total_patch_count,
+        f"{patient_id}_total_regions": region_index
+    })
     
     # Fermer les slides
     slide_hes.close()
@@ -342,6 +371,9 @@ print(f"\n{len(pairs)} paires de slides à traiter\n")
 
 # Traiter chaque paire
 total_patches = 0
+processed_slides = 0
+failed_slides = 0
+
 for idx, (base_id, paths) in enumerate(pairs.items(), 1):
     print(f"\n{'*'*80}")
     print(f"Paire {idx}/{len(pairs)}: {base_id}")
@@ -350,15 +382,38 @@ for idx, (base_id, paths) in enumerate(pairs.items(), 1):
     try:
         patch_count = process_slide_pair(paths['hes'], paths['cd30'], hes_dir, cd30_dir)
         total_patches += patch_count
+        processed_slides += 1
+        
+        # Log wandb progression globale
+        wandb.log({
+            "total_patches_so_far": total_patches,
+            "processed_slides": processed_slides,
+            "progress_pct": (idx / len(pairs)) * 100
+        })
+        
     except Exception as e:
         print(f"\n✗ Erreur lors du traitement de {base_id}: {e}")
         import traceback
         traceback.print_exc()
+        failed_slides += 1
+        wandb.log({"failed_slides": failed_slides})
         continue
 
 print(f"\n{'='*80}")
 print("TRAITEMENT TERMINÉ")
 print(f"{'='*80}")
 print(f"Total: {total_patches} paires de patches extraites")
+print(f"Lames traitées avec succès: {processed_slides}/{len(pairs)}")
+print(f"Lames échouées: {failed_slides}")
 print(f"Patches HES sauvegardés dans: {hes_dir}")
 print(f"Patches CD30 sauvegardés dans: {cd30_dir}")
+
+# Log wandb final
+wandb.log({
+    "final_total_patches": total_patches,
+    "final_processed_slides": processed_slides,
+    "final_failed_slides": failed_slides
+})
+
+# Terminer wandb
+wandb.finish()

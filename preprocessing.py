@@ -11,8 +11,8 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Configuration
-input_folder = "/tmp/data/gold"
-output_folder = "/home/azureuser"
+input_folder = "/gold/data_feasibility"
+output_folder = "/silver/ube/data_feasibility"
 patch_size = 512
 lowres_level = 2
 tissue_threshold = 0.60

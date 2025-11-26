@@ -8,3 +8,5 @@ seaborn
 scikit-image
 Pillow
 wandb
+opencv-python
+openslide-python

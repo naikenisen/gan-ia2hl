@@ -2,7 +2,6 @@ import torch
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 BASE_HandE_PATH = '/silver/ube/data_feasibility/HES'
 BASE_IHC_PATH = '/silver/ube/data_feasibility/CD30'
-RECEPTOR = 'Ki67'
 BUFFER_SIZE = 400
 BATCH_SIZE = 4
 IMG_WIDTH = 256

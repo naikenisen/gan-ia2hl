@@ -3,7 +3,7 @@ from PIL import Image
 import torch
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
-from src.config import BASE_HandE_PATH, BASE_IHC_PATH, RECEPTOR, IMG_HEIGHT, IMG_WIDTH, BATCH_SIZE
+from src.config import BASE_HandE_PATH, BASE_IHC_PATH, IMG_HEIGHT, IMG_WIDTH, BATCH_SIZE
                 
 # fonction pour récupérer les chemins des images HandE et IHC
 def get_image_paths(hande_base, ihc_base):

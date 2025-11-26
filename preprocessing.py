@@ -246,13 +246,19 @@ def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
                 (x_cd30, y_cd30), 0, (patch_size, patch_size)
             ).convert("RGB")
             
-            # Sauvegarder les patches
+            # Créer un sous-dossier pour chaque patch (par coordonnées)
+            patch_subdir = f"x{x}_y{y}"
+            hes_patch_dir = os.path.join(hes_out, patch_subdir)
+            cd30_patch_dir = os.path.join(cd30_out, patch_subdir)
+            os.makedirs(hes_patch_dir, exist_ok=True)
+            os.makedirs(cd30_patch_dir, exist_ok=True)
+
             name_hes = f"{hes_id}_x{x}_y{y}.jpg"
             name_cd30 = f"{cd30_id}_x{x}_y{y}.jpg"  # Utilise les mêmes coordonnées pour l'appariement
-            
-            patch_hes.save(os.path.join(hes_out, name_hes))
-            patch_cd30.save(os.path.join(cd30_out, name_cd30))
-            
+
+            patch_hes.save(os.path.join(hes_patch_dir, name_hes))
+            patch_cd30.save(os.path.join(cd30_patch_dir, name_cd30))
+
             patch_count += 1
     
     print(f"\n✓ {patch_count} paires de patches extraites")

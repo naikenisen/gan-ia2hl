@@ -247,8 +247,8 @@ def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
             ).convert("RGB")
             
             # Sauvegarder les patches
-            name_hes = f"{hes_id}_x{x}_y{y}.png"
-            name_cd30 = f"{cd30_id}_x{x}_y{y}.png"  # Utilise les mêmes coordonnées pour l'appariement
+            name_hes = f"{hes_id}_x{x}_y{y}.jpg"
+            name_cd30 = f"{cd30_id}_x{x}_y{y}.jpg"  # Utilise les mêmes coordonnées pour l'appariement
             
             patch_hes.save(os.path.join(hes_out, name_hes))
             patch_cd30.save(os.path.join(cd30_out, name_cd30))

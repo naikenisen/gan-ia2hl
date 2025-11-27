@@ -15,13 +15,13 @@ input_folder = "/gold/data_feasibility"
 output_file = "alignment_overview.jpg"
 
 # Liste des patients à traiter
-patient_ids = ["AHL001", "AHL002", "AHL004", "AHL006", "AHL011"]
+patient_ids = ["AHL002","AHL006"]
 
 patch_size = 2000
 region_size = 12000
 stride_region = 12000
 lowres_level = 2
-tissue_threshold = 0.60
+tissue_threshold = 0.20
 
 def compute_tissue_mask(img_rgb):
     """Calcule un masque binaire des tissus basé sur la saturation."""
@@ -57,8 +57,9 @@ def process_patient(patient_id):
     lowres_hes_np = np.array(lowres_hes)
     lowres_cd30_np = np.array(lowres_cd30)
     
-    # Calculer le masque de tissu
+    # Calculer les masques de tissu
     mask_hes = compute_tissue_mask(lowres_hes)
+    mask_cd30 = compute_tissue_mask(lowres_cd30)
     
     # Dimensions
     w0_hes, h0_hes = slide_hes.level_dimensions[0]
@@ -102,13 +103,27 @@ def process_patient(patient_id):
     
     print(f"  Trouvé {len(valid_regions)} régions valides")
     
-    # Créer les images annotées
+    # Créer les différentes versions d'images
+    img_hes_original = lowres_hes_np.copy()
+    img_cd30_original = lowres_cd30_np.copy()
+    
+    # Créer un overlay du masque de segmentation pour H&E
+    mask_hes_colored = np.zeros_like(lowres_hes_np)
+    mask_hes_colored[:, :, 1] = mask_hes  # Canal vert pour le masque
+    img_hes_segmented = cv2.addWeighted(lowres_hes_np, 0.7, mask_hes_colored, 0.3, 0)
+    
+    # Créer un overlay du masque de segmentation pour CD30
+    mask_cd30_colored = np.zeros_like(lowres_cd30_np)
+    mask_cd30_colored[:, :, 1] = mask_cd30  # Canal vert pour le masque
+    img_cd30_segmented = cv2.addWeighted(lowres_cd30_np, 0.7, mask_cd30_colored, 0.3, 0)
+    
+    # Images avec rectangles
     img_hes_annotated = lowres_hes_np.copy()
     img_cd30_annotated = lowres_cd30_np.copy()
     
     # Annoter les régions
     for region in valid_regions:
-        # HES
+        # HES avec rectangles
         cv2.rectangle(
             img_hes_annotated,
             (region['x_lr'], region['y_lr']),
@@ -116,7 +131,7 @@ def process_patient(patient_id):
             (255, 0, 0), 8
         )
         
-        # CD30
+        # CD30 avec rectangles
         region_x_cd30_lr = int(region['x'] / downsample_cd30)
         region_y_cd30_lr = int(region['y'] / downsample_cd30)
         region_size_cd30_lr = int(region_size / downsample_cd30)
@@ -132,7 +147,7 @@ def process_patient(patient_id):
     slide_hes.close()
     slide_cd30.close()
     
-    return img_hes_annotated, img_cd30_annotated, len(valid_regions)
+    return img_hes_original, img_hes_segmented, img_cd30_segmented, img_hes_annotated, img_cd30_annotated, len(valid_regions)
 
 
 # Traiter tous les patients
@@ -143,11 +158,14 @@ print("="*80)
 all_images = []
 for patient_id in patient_ids:
     try:
-        img_hes, img_cd30, n_regions = process_patient(patient_id)
+        img_hes_orig, img_hes_seg, img_cd30_seg, img_hes_rect, img_cd30_rect, n_regions = process_patient(patient_id)
         all_images.append({
             'patient_id': patient_id,
-            'hes': img_hes,
-            'cd30': img_cd30,
+            'hes_original': img_hes_orig,
+            'hes_segmented': img_hes_seg,
+            'cd30_segmented': img_cd30_seg,
+            'hes_rectangles': img_hes_rect,
+            'cd30_rectangles': img_cd30_rect,
             'n_regions': n_regions
         })
     except Exception as e:
@@ -160,33 +178,51 @@ print("CRÉATION DE LA FIGURE FINALE")
 print("="*80)
 
 n_patients = len(all_images)
-fig, axes = plt.subplots(n_patients, 2, figsize=(16, 5*n_patients))
+fig, axes = plt.subplots(n_patients, 5, figsize=(30, 5*n_patients))
 
 # S'assurer que axes est un tableau 2D même avec un seul patient
 if n_patients == 1:
     axes = axes.reshape(1, -1)
 
 for idx, data in enumerate(all_images):
-    # HES
-    axes[idx, 0].imshow(data['hes'])
-    axes[idx, 0].set_title(f"{data['patient_id']} - H&E\n{data['n_regions']} régions", 
-                           fontsize=14, fontweight='bold')
+    # Colonne 1: HES original
+    axes[idx, 0].imshow(data['hes_original'])
+    axes[idx, 0].set_title(f"{data['patient_id']} - H&E Original", 
+                           fontsize=12, fontweight='bold')
     axes[idx, 0].axis('off')
     
-    # CD30
-    axes[idx, 1].imshow(data['cd30'])
-    axes[idx, 1].set_title(f"{data['patient_id']} - CD30\n{data['n_regions']} régions", 
-                           fontsize=14, fontweight='bold')
+    # Colonne 2: HES avec segmentation
+    axes[idx, 1].imshow(data['hes_segmented'])
+    axes[idx, 1].set_title(f"H&E + Segmentation\n(masque vert 30%)", 
+                           fontsize=12, fontweight='bold')
     axes[idx, 1].axis('off')
+    
+    # Colonne 3: CD30 avec segmentation
+    axes[idx, 2].imshow(data['cd30_segmented'])
+    axes[idx, 2].set_title(f"CD30 + Segmentation\n(masque vert 30%)", 
+                           fontsize=12, fontweight='bold')
+    axes[idx, 2].axis('off')
+    
+    # Colonne 4: HES avec rectangles rouges
+    axes[idx, 3].imshow(data['hes_rectangles'])
+    axes[idx, 3].set_title(f"H&E + Régions\n({data['n_regions']} rectangles rouges)", 
+                           fontsize=12, fontweight='bold')
+    axes[idx, 3].axis('off')
+    
+    # Colonne 5: CD30 avec rectangles bleus
+    axes[idx, 4].imshow(data['cd30_rectangles'])
+    axes[idx, 4].set_title(f"CD30 + Régions\n({data['n_regions']} rectangles bleus)", 
+                           fontsize=12, fontweight='bold')
+    axes[idx, 4].axis('off')
 
-plt.suptitle('Alignement des lames H&E et CD30 - Régions sélectionnées', 
+plt.suptitle('Pipeline complet: Segmentation et Alignement des lames H&E et CD30', 
              fontsize=18, fontweight='bold', y=0.995)
 plt.tight_layout()
 
 # Sauvegarder en haute qualité
-plt.savefig(output_file, dpi=300, bbox_inches='tight', format='jpg')
+plt.savefig(output_file, dpi=500, bbox_inches='tight', format='jpg')
 print(f"\n✓ Figure sauvegardée: {output_file}")
-print(f"  Format: JPEG haute qualité (300 DPI)")
+print(f"  Format: JPEG haute qualité (500 DPI)")
 print(f"  Patients inclus: {', '.join([d['patient_id'] for d in all_images])}")
 print(f"  Total régions: {sum([d['n_regions'] for d in all_images])}")
 print("\n✓ Visualisation terminée!")

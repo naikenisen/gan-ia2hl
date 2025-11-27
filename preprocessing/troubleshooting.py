@@ -24,6 +24,7 @@ os.makedirs(output_folder, exist_ok=True)
 # Dictionnaire global pour stocker les métriques de registration
 registration_metrics = defaultdict(lambda: defaultdict(dict))
 
+patch_size = 2000
 region_size = 12000
 overlap_percent = 0.20  # 20% de chevauchement entre les régions
 lowres_level = 2
@@ -33,6 +34,7 @@ wandb.init(
     project="ia2hl-preprocessing",
     name="orb-registration-visualization",
     config={
+        "patch_size": patch_size,
         "region_size": region_size,
         "overlap_percent": overlap_percent,
         "lowres_level": lowres_level,
@@ -75,13 +77,8 @@ def visualize_orb_detection_and_matching(img_fixed, img_moving, patient_id, regi
     gray_fixed = cv2.cvtColor(img_fixed, cv2.COLOR_RGB2GRAY)
     gray_moving = cv2.cvtColor(img_moving, cv2.COLOR_RGB2GRAY)
     
-    # Amélioration du contraste avec CLAHE pour mieux détecter les features
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-    gray_fixed = clahe.apply(gray_fixed)
-    gray_moving = clahe.apply(gray_moving)
-    
-    # Détection ORB avec plus de features pour régions difficiles
-    orb = cv2.ORB_create(nfeatures=10000)
+    # Détection ORB
+    orb = cv2.ORB_create(nfeatures=5000)
     kp1, desc1 = orb.detectAndCompute(gray_fixed, None)
     kp2, desc2 = orb.detectAndCompute(gray_moving, None)
     
@@ -110,8 +107,7 @@ def visualize_orb_detection_and_matching(img_fixed, img_moving, patient_id, regi
     matches = bf.match(desc1, desc2)
     matches = sorted(matches, key=lambda x: x.distance)
     
-    # Augmentation du ratio de good matches de 15% à 25% pour plus de robustesse
-    num_good_matches = min(len(matches), max(50, int(len(matches) * 0.25)))
+    num_good_matches = min(len(matches), max(50, int(len(matches) * 0.15)))
     good_matches = matches[:num_good_matches]
     
     # Logger les correspondances
@@ -138,18 +134,17 @@ def visualize_orb_detection_and_matching(img_fixed, img_moving, patient_id, regi
     src_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 2)
     dst_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 2)
     
-    # RANSAC avec paramètres plus permissifs
+    # RANSAC
     try:
         model, inliers = ransac(
             (src_pts, dst_pts),
             AffineTransform,
             min_samples=3,
-            residual_threshold=8.0,  # Augmenté de 5.0 à 8.0 pour tolérer plus d'imprécision
-            max_trials=2000  # Augmenté de 1000 à 2000 pour plus de chances de trouver un bon modèle
+            residual_threshold=5.0,
+            max_trials=1000
         )
         
-        # Réduction du seuil minimum d'inliers de 4 à 3 (minimum pour transformation affine)
-        if model is None or np.sum(inliers) < 3:
+        if model is None or np.sum(inliers) < 4:
             print("RANSAC échoué")
             wandb.log({
                 f"{patient_id}/region_{region_idx}/status": "failed_ransac"
@@ -167,24 +162,7 @@ def visualize_orb_detection_and_matching(img_fixed, img_moving, patient_id, regi
         num_outliers = len(good_matches) - num_inliers
         inlier_ratio = num_inliers / len(good_matches)
         
-        # Affichage avec indicateur de qualité
-        if inlier_ratio >= 0.80:
-            quality = "EXCELLENT"
-            symbol = "✓✓✓"
-        elif inlier_ratio >= 0.60:
-            quality = "BON"
-            symbol = "✓✓"
-        elif inlier_ratio >= 0.40:
-            quality = "MOYEN"
-            symbol = "✓"
-        elif inlier_ratio >= 0.20:
-            quality = "FAIBLE"
-            symbol = "⚠"
-        else:
-            quality = "TRÈS FAIBLE"
-            symbol = "⚠⚠"
-        
-        print(f"{symbol} {num_inliers} inliers sur {len(good_matches)} matches (ratio: {inlier_ratio:.1%} - {quality})")
+        print(f"✓ {num_inliers} inliers sur {len(good_matches)} matches")
         
         # Logger les résultats RANSAC
         wandb.log({
@@ -371,6 +349,137 @@ def generate_registration_csv(output_folder):
     return csv_path, detailed_csv_path
 
 
+def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
+    """
+    Effectue une registration globale de la lame entière à basse résolution.
+    Retourne la transformation globale et l'image CD30 alignée.
+    """
+    print("\n[REGISTRATION GLOBALE] Alignement de la lame entière...")
+    
+    # Conversion en niveaux de gris
+    gray_hes = cv2.cvtColor(lowres_hes_np, cv2.COLOR_RGB2GRAY)
+    gray_cd30 = cv2.cvtColor(lowres_cd30_np, cv2.COLOR_RGB2GRAY)
+    
+    # Détection ORB sur la lame entière
+    orb = cv2.ORB_create(nfeatures=8000)  # Plus de features pour la lame entière
+    kp1, desc1 = orb.detectAndCompute(gray_hes, None)
+    kp2, desc2 = orb.detectAndCompute(gray_cd30, None)
+    
+    print(f"  Points détectés - HES: {len(kp1) if kp1 else 0}, CD30: {len(kp2) if kp2 else 0}")
+    
+    # Logger les keypoints globaux
+    wandb.log({
+        f"{patient_id}/global/keypoints_hes": len(kp1) if kp1 else 0,
+        f"{patient_id}/global/keypoints_cd30": len(kp2) if kp2 else 0,
+    })
+    
+    if desc1 is None or desc2 is None or len(kp1) < 4 or len(kp2) < 4:
+        print("  ✗ Pas assez de points détectés pour la registration globale")
+        wandb.log({f"{patient_id}/global/status": "failed_detection"})
+        return None, lowres_cd30_np
+    
+    # Matching
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    matches = bf.match(desc1, desc2)
+    matches = sorted(matches, key=lambda x: x.distance)
+    
+    num_good_matches = min(len(matches), max(100, int(len(matches) * 0.20)))
+    good_matches = matches[:num_good_matches]
+    
+    print(f"  Correspondances: {len(matches)} total, {len(good_matches)} sélectionnées")
+    
+    wandb.log({
+        f"{patient_id}/global/total_matches": len(matches),
+        f"{patient_id}/global/good_matches": len(good_matches),
+    })
+    
+    if len(good_matches) < 4:
+        print("  ✗ Pas assez de correspondances pour la registration globale")
+        wandb.log({f"{patient_id}/global/status": "failed_matching"})
+        return None, lowres_cd30_np
+    
+    # Extraire les points
+    src_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 2)
+    dst_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 2)
+    
+    # RANSAC pour la transformation globale
+    try:
+        model_global, inliers = ransac(
+            (src_pts, dst_pts),
+            AffineTransform,
+            min_samples=3,
+            residual_threshold=8.0,  # Un peu plus permissif pour la lame entière
+            max_trials=2000
+        )
+        
+        if model_global is None or np.sum(inliers) < 4:
+            print("  ✗ RANSAC échoué pour la registration globale")
+            wandb.log({f"{patient_id}/global/status": "failed_ransac"})
+            return None, lowres_cd30_np
+        
+        num_inliers = np.sum(inliers)
+        inlier_ratio = num_inliers / len(good_matches)
+        
+        print(f"  ✓ Registration globale réussie: {num_inliers}/{len(good_matches)} inliers (ratio: {inlier_ratio:.3f})")
+        
+        # Logger les résultats
+        wandb.log({
+            f"{patient_id}/global/inliers": int(num_inliers),
+            f"{patient_id}/global/inlier_ratio": inlier_ratio,
+            f"{patient_id}/global/status": "success"
+        })
+        
+        # Appliquer la transformation globale
+        h, w = lowres_hes_np.shape[:2]
+        aligned_cd30_global = cv2.warpAffine(
+            lowres_cd30_np, 
+            model_global.params[:2], 
+            (w, h),
+            flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=(255, 255, 255)
+        )
+        
+        # Visualisation de la registration globale
+        fig, axes = plt.subplots(1, 3, figsize=(20, 7))
+        
+        axes[0].imshow(lowres_hes_np)
+        axes[0].set_title('HES (référence)', fontsize=14, fontweight='bold')
+        axes[0].axis('off')
+        
+        axes[1].imshow(lowres_cd30_np)
+        axes[1].set_title('CD30 (originale)', fontsize=14, fontweight='bold')
+        axes[1].axis('off')
+        
+        axes[2].imshow(aligned_cd30_global)
+        axes[2].set_title(f'CD30 (alignée globalement)\n{num_inliers} inliers, ratio: {inlier_ratio:.3f}', 
+                         fontsize=14, fontweight='bold')
+        axes[2].axis('off')
+        
+        plt.suptitle(f'Patient {patient_id}\nRegistration globale de la lame entière', 
+                    fontsize=16, fontweight='bold', y=0.98)
+        plt.tight_layout()
+        
+        output_path = os.path.join(output_folder, f'{patient_id}_0_global_registration.png')
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        plt.close()
+        print(f"  → Visualisation sauvegardée: {output_path}")
+        
+        wandb.log({
+            f"{patient_id}/global/visualization": wandb.Image(output_path)
+        })
+        
+        return model_global, aligned_cd30_global
+        
+    except Exception as e:
+        print(f"  ✗ Erreur lors de la registration globale: {e}")
+        wandb.log({
+            f"{patient_id}/global/status": "failed_error",
+            f"{patient_id}/global/error": str(e)
+        })
+        return None, lowres_cd30_np
+
+
 def process_one_slide_pair_visualization(hes_path, cd30_path):
     """Traite une paire de slides et génère toutes les visualisations pour toutes les régions."""
     
@@ -390,7 +499,7 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
     })
     
     # Charger les images basse résolution
-    print("\n[1/3] Chargement des images basse résolution...")
+    print("\n[1/4] Chargement des images basse résolution...")
     w_lr_hes, h_lr_hes = slide_hes.level_dimensions[lowres_level]
     w_lr_cd30, h_lr_cd30 = slide_cd30.level_dimensions[lowres_level]
     
@@ -400,12 +509,23 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
     lowres_hes_np = np.array(lowres_hes)
     lowres_cd30_np = np.array(lowres_cd30)
     
+    # ÉTAPE DE REGISTRATION GLOBALE
+    print("\n[2/4] Registration globale de la lame entière...")
+    global_transform, aligned_cd30_global = register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id)
+    
+    # Utiliser l'image alignée globalement pour la suite
+    if global_transform is not None:
+        print("  ✓ Utilisation de la transformation globale pour les régions")
+        lowres_cd30_np = aligned_cd30_global
+    else:
+        print("  ⚠ Pas de transformation globale, utilisation de l'image originale")
+    
     # Calculer le masque de tissu
-    print("\n[2/3] Calcul du masque de tissu...")
+    print("\n[3/4] Calcul du masque de tissu...")
     mask_hes = compute_tissue_mask(lowres_hes)
     
     # Trouver toutes les régions avec du tissu
-    print("\n[3/3] Recherche de toutes les régions avec tissu...")
+    print("\n[4/4] Recherche de toutes les régions avec tissu...")
     w0_hes, h0_hes = slide_hes.level_dimensions[0]
     downsample_hes = int(slide_hes.level_downsamples[lowres_level])
     downsample_cd30 = int(slide_cd30.level_downsamples[lowres_level])

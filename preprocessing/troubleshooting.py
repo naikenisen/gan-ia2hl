@@ -71,7 +71,7 @@ def compute_tissue_mask(img_rgb):
 def perform_region_registration(img_fixed, img_moving, patient_id, region_idx):
     """
     Effectue la registration d'une région sans générer de figure.
-    Retourne les métriques de registration.
+    Retourne les métriques de registration et la transformation.
     """
     # Conversion en niveaux de gris
     gray_fixed = cv2.cvtColor(img_fixed, cv2.COLOR_RGB2GRAY)
@@ -97,7 +97,8 @@ def perform_region_registration(img_fixed, img_moving, patient_id, region_idx):
             'inliers': 0,
             'total_matches': 0,
             'ratio': 0.0,
-            'status': 'failed_detection'
+            'status': 'failed_detection',
+            'transform': None
         }
     
     # Matching
@@ -123,7 +124,8 @@ def perform_region_registration(img_fixed, img_moving, patient_id, region_idx):
             'inliers': 0,
             'total_matches': len(matches),
             'ratio': 0.0,
-            'status': 'failed_matching'
+            'status': 'failed_matching',
+            'transform': None
         }
     
     # Extraire les points
@@ -155,7 +157,8 @@ def perform_region_registration(img_fixed, img_moving, patient_id, region_idx):
                 'inliers': int(num_inliers_found),
                 'total_matches': len(good_matches),
                 'ratio': 0.0,
-                'status': f'failed_insufficient_inliers'
+                'status': f'failed_insufficient_inliers',
+                'transform': None
             }
         
         num_inliers = np.sum(inliers)
@@ -174,7 +177,8 @@ def perform_region_registration(img_fixed, img_moving, patient_id, region_idx):
             'inliers': int(num_inliers),
             'total_matches': len(good_matches),
             'ratio': float(inlier_ratio),
-            'status': 'success'
+            'status': 'success',
+            'transform': model
         }
         
     except Exception as e:
@@ -188,9 +192,105 @@ def perform_region_registration(img_fixed, img_moving, patient_id, region_idx):
             'total_matches': 0,
             'ratio': 0.0,
             'status': 'failed_error',
-            'error': str(e)
+            'error': str(e),
+            'transform': None
         }
 
+
+
+def interpolate_transform_from_neighbors(region_info, regions_info):
+    """
+    Interpole la transformation d'une région à partir de ses voisins valides.
+    Utilise une moyenne pondérée par la distance inverse.
+    """
+    grid_x = region_info['x_lr'] // region_info['size_lr']
+    grid_y = region_info['y_lr'] // region_info['size_lr']
+    
+    # Trouver tous les voisins avec transformation valide
+    valid_neighbors = []
+    for other in regions_info:
+        if other['metrics']['transform'] is None:
+            continue
+        
+        other_grid_x = other['x_lr'] // other['size_lr']
+        other_grid_y = other['y_lr'] // other['size_lr']
+        
+        # Distance dans la grille
+        dist = np.sqrt((grid_x - other_grid_x)**2 + (grid_y - other_grid_y)**2)
+        
+        # Prendre les voisins dans un rayon de 3 cellules
+        if 0 < dist <= 3:
+            valid_neighbors.append({
+                'transform': other['metrics']['transform'],
+                'distance': dist,
+                'weight': 1.0 / dist  # Poids = inverse de la distance
+            })
+    
+    if not valid_neighbors:
+        return None
+    
+    # Normaliser les poids
+    total_weight = sum(n['weight'] for n in valid_neighbors)
+    for n in valid_neighbors:
+        n['weight'] /= total_weight
+    
+    # Interpoler la matrice de transformation (moyenne pondérée)
+    interpolated_params = np.zeros((3, 3))
+    for neighbor in valid_neighbors:
+        interpolated_params += neighbor['weight'] * neighbor['transform'].params
+    
+    # Créer une nouvelle transformation
+    interpolated_transform = AffineTransform(matrix=interpolated_params)
+    
+    return interpolated_transform
+
+
+def apply_spatial_coherence_correction(regions_info, patient_id):
+    """
+    Applique la correction par cohérence spatiale :
+    - Identifie les régions qui ont échoué
+    - Interpole leur transformation à partir des voisins valides
+    """
+    failed_regions = [r for r in regions_info if r['metrics']['status'] != 'success']
+    success_regions = [r for r in regions_info if r['metrics']['status'] == 'success']
+    
+    if not success_regions:
+        print("  ⚠ Aucune région valide pour interpolation")
+        return regions_info
+    
+    corrected_count = 0
+    
+    for region in failed_regions:
+        print(f"  → Tentative d'interpolation pour région {region['idx']}...")
+        
+        interpolated_transform = interpolate_transform_from_neighbors(region, success_regions)
+        
+        if interpolated_transform is not None:
+            # Mettre à jour les métriques
+            region['metrics']['transform'] = interpolated_transform
+            region['metrics']['status'] = 'interpolated'
+            region['metrics']['inliers'] = -1  # Marqueur spécial
+            region['metrics']['ratio'] = -1.0
+            
+            corrected_count += 1
+            print(f"    ✓ Transformation interpolée à partir de {len([r for r in success_regions if r['metrics']['transform'] is not None])} voisins")
+            
+            # Logger dans wandb
+            wandb.log({
+                f"{patient_id}/region_{region['idx']}/status": "interpolated",
+                f"{patient_id}/region_{region['idx']}/correction": "spatial_coherence"
+            })
+        else:
+            print(f"    ✗ Pas assez de voisins valides")
+    
+    if corrected_count > 0:
+        print(f"\n  ✓ {corrected_count} région(s) corrigée(s) par interpolation spatiale")
+        wandb.log({
+            f"{patient_id}/spatial_coherence/corrected_regions": corrected_count,
+            f"{patient_id}/spatial_coherence/failed_regions": len(failed_regions)
+        })
+    
+    return regions_info
 
 
 def generate_patient_overview_figure(lowres_hes_np, patient_id, regions_info):
@@ -220,6 +320,11 @@ def generate_patient_overview_figure(lowres_hes_np, patient_id, regions_info):
             face_color = 'lime'
             alpha_face = 0.1
             linewidth = 3
+        elif metrics['status'] == 'interpolated':
+            edge_color = 'orange'
+            face_color = 'orange'
+            alpha_face = 0.15
+            linewidth = 2.5
         else:
             edge_color = 'red'
             face_color = 'red'
@@ -243,6 +348,10 @@ def generate_patient_overview_figure(lowres_hes_np, patient_id, regions_info):
             text = f"Région {region_idx}\n{metrics['inliers']} inliers\nRatio: {metrics['ratio']:.3f}"
             text_color = 'white'
             bbox_color = 'green'
+        elif metrics['status'] == 'interpolated':
+            text = f"Région {region_idx}\nInterpolée"
+            text_color = 'white'
+            bbox_color = 'darkorange'
         else:
             text = f"Région {region_idx}\nÉchec"
             text_color = 'white'
@@ -544,6 +653,14 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
     
     slide_hes.close()
     slide_cd30.close()
+    
+    # Appliquer la correction par cohérence spatiale
+    if regions_info:
+        print(f"\n[CORRECTION] Application de la cohérence spatiale pour {patient_id}...")
+        regions_info = apply_spatial_coherence_correction(regions_info, patient_id)
+        
+        # Recompter les régions traitées après correction
+        regions_processed = sum(1 for r in regions_info if r['metrics']['status'] in ['success', 'interpolated'])
     
     # Générer la figure de vue d'ensemble
     if regions_info:

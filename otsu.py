@@ -63,4 +63,4 @@ for idx, filename in enumerate(svs_files):
     plt.axis("off")
 
 plt.tight_layout()
-plt.savefig("/home/naiken/coding/ia2hl/otsu/pannel.png", dpi=250, bbox_inches="tight")
+plt.savefig("/otsu/pannel.png", dpi=250, bbox_inches="tight")

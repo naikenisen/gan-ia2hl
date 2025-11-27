@@ -68,10 +68,10 @@ def compute_tissue_mask(img_rgb):
 
 
 
-def visualize_orb_detection_and_matching(img_fixed, img_moving, patient_id, region_idx):
+def perform_region_registration(img_fixed, img_moving, patient_id, region_idx):
     """
-    Visualise la détection ORB et l'appariement des points.
-    Retourne aussi la transformation calculée.
+    Effectue la registration d'une région sans générer de figure.
+    Retourne les métriques de registration.
     """
     # Conversion en niveaux de gris
     gray_fixed = cv2.cvtColor(img_fixed, cv2.COLOR_RGB2GRAY)
@@ -93,14 +93,12 @@ def visualize_orb_detection_and_matching(img_fixed, img_moving, patient_id, regi
         wandb.log({
             f"{patient_id}/region_{region_idx}/status": "failed_detection"
         })
-        # Enregistrer les métriques d'échec
-        registration_metrics[patient_id][region_idx] = {
+        return {
             'inliers': 0,
             'total_matches': 0,
             'ratio': 0.0,
             'status': 'failed_detection'
         }
-        return None, None, None, False
     
     # Matching
     bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
@@ -121,14 +119,12 @@ def visualize_orb_detection_and_matching(img_fixed, img_moving, patient_id, regi
         wandb.log({
             f"{patient_id}/region_{region_idx}/status": "failed_matching"
         })
-        # Enregistrer les métriques d'échec
-        registration_metrics[patient_id][region_idx] = {
+        return {
             'inliers': 0,
             'total_matches': len(matches),
             'ratio': 0.0,
             'status': 'failed_matching'
         }
-        return None, None, None, False
     
     # Extraire les points
     src_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 2)
@@ -155,17 +151,14 @@ def visualize_orb_detection_and_matching(img_fixed, img_moving, patient_id, regi
                 f"{patient_id}/region_{region_idx}/inliers_found": int(num_inliers_found),
                 f"{patient_id}/region_{region_idx}/min_required": MIN_INLIERS
             })
-            # Enregistrer les métriques d'échec
-            registration_metrics[patient_id][region_idx] = {
+            return {
                 'inliers': int(num_inliers_found),
                 'total_matches': len(good_matches),
                 'ratio': 0.0,
-                'status': f'failed_insufficient_inliers (found {num_inliers_found}, required {MIN_INLIERS})'
+                'status': f'failed_insufficient_inliers'
             }
-            return None, None, None, False
         
         num_inliers = np.sum(inliers)
-        num_outliers = len(good_matches) - num_inliers
         inlier_ratio = num_inliers / len(good_matches)
         
         print(f"✓ {num_inliers} inliers sur {len(good_matches)} matches (seuil: {MIN_INLIERS})")
@@ -173,94 +166,16 @@ def visualize_orb_detection_and_matching(img_fixed, img_moving, patient_id, regi
         # Logger les résultats RANSAC
         wandb.log({
             f"{patient_id}/region_{region_idx}/inliers": int(num_inliers),
-            f"{patient_id}/region_{region_idx}/outliers": int(num_outliers),
             f"{patient_id}/region_{region_idx}/inlier_ratio": inlier_ratio,
+            f"{patient_id}/region_{region_idx}/status": "success"
         })
         
-        # Enregistrer les métriques de succès
-        registration_metrics[patient_id][region_idx] = {
+        return {
             'inliers': int(num_inliers),
             'total_matches': len(good_matches),
             'ratio': float(inlier_ratio),
             'status': 'success'
         }
-        
-        # Appliquer la transformation
-        h, w = img_fixed.shape[:2]
-        aligned_img = cv2.warpAffine(
-            img_moving, 
-            model.params[:2], 
-            (w, h),
-            flags=cv2.INTER_LINEAR,
-            borderMode=cv2.BORDER_CONSTANT,
-            borderValue=(255, 255, 255)
-        )
-        
-        # === FIGURE 1: Détection des points ORB ===
-        fig1, axes = plt.subplots(1, 3, figsize=(20, 7))
-        
-        # Points détectés dans HES
-        img1_kp = cv2.drawKeypoints(img_fixed, kp1, None, 
-                                     color=(0, 255, 0), 
-                                     flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
-        axes[0].imshow(img1_kp)
-        axes[0].set_title(f'HES (référence)\n{len(kp1)} points ORB détectés', fontsize=14, fontweight='bold')
-        axes[0].axis('off')
-        
-        # Points détectés dans CD30
-        img2_kp = cv2.drawKeypoints(img_moving, kp2, None, 
-                                     color=(255, 0, 0), 
-                                     flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
-        axes[1].imshow(img2_kp)
-        axes[1].set_title(f'CD30 (à aligner)\n{len(kp2)} points ORB détectés', fontsize=14, fontweight='bold')
-        axes[1].axis('off')
-        
-        # Correspondances avec inliers/outliers
-        img_matches = np.hstack([img_fixed, img_moving])
-        axes[2].imshow(img_matches)
-        
-        offset_x = img_fixed.shape[1]
-        
-        # Dessiner les matches (outliers en rouge, inliers en vert)
-        for idx, match in enumerate(good_matches):
-            pt1 = tuple(map(int, kp1[match.queryIdx].pt))
-            pt2 = tuple(map(int, kp2[match.trainIdx].pt))
-            pt2_shifted = (pt2[0] + offset_x, pt2[1])
-            
-            if inliers[idx]:
-                color = 'lime'
-                alpha = 0.8
-                linewidth = 1.5
-            else:
-                color = 'red'
-                alpha = 0.3
-                linewidth = 0.8
-            
-            axes[2].plot([pt1[0], pt2_shifted[0]], [pt1[1], pt2_shifted[1]], 
-                        color=color, alpha=alpha, linewidth=linewidth)
-            axes[2].plot(pt1[0], pt1[1], 'o', color='cyan', markersize=3)
-            axes[2].plot(pt2_shifted[0], pt2_shifted[1], 'o', color='yellow', markersize=3)
-        
-        axes[2].set_title(f'Appariement des points\n{num_inliers} inliers (vert) / {len(good_matches)-num_inliers} outliers (rouge)', 
-                         fontsize=14, fontweight='bold')
-        axes[2].axis('off')
-        
-        plt.suptitle(f'Patient {patient_id} - Région {region_idx}\nÉtape 1: Détection ORB et appariement', 
-                    fontsize=16, fontweight='bold', y=0.98)
-        plt.tight_layout()
-        
-        output_path1 = os.path.join(output_folder, f'{patient_id}_region{region_idx}_1_ORB_detection.png')
-        plt.savefig(output_path1, dpi=150, bbox_inches='tight')
-        plt.close()
-        print(f"  → Sauvegardé: {output_path1}")
-        
-        # Logger l'image de visualisation
-        wandb.log({
-            f"{patient_id}/region_{region_idx}/visualization": wandb.Image(output_path1),
-            f"{patient_id}/region_{region_idx}/status": "success"
-        })
-        
-        return model, aligned_img, inliers, True
         
     except Exception as e:
         print(f"Erreur: {e}")
@@ -268,91 +183,109 @@ def visualize_orb_detection_and_matching(img_fixed, img_moving, patient_id, regi
             f"{patient_id}/region_{region_idx}/status": "failed_error",
             f"{patient_id}/region_{region_idx}/error": str(e)
         })
-        # Enregistrer les métriques d'erreur
-        registration_metrics[patient_id][region_idx] = {
+        return {
             'inliers': 0,
             'total_matches': 0,
             'ratio': 0.0,
             'status': 'failed_error',
             'error': str(e)
         }
-        return None, None, None, False
 
 
 
-def generate_registration_csv(output_folder):
+def generate_patient_overview_figure(lowres_hes_np, patient_id, regions_info):
     """
-    Génère un CSV avec les métriques de registration.
-    Format: Lignes = patients_type (HES/CD30), Colonnes = régions, Valeurs = ratio inliers/total
+    Génère une figure unique par patient montrant toutes les régions sur la lame HES
+    avec les métriques de registration affichées dans chaque région.
     """
-    csv_path = os.path.join(output_folder, "registration_metrics.csv")
+    fig, ax = plt.subplots(1, 1, figsize=(20, 16))
     
-    # Créer une liste pour stocker les données
-    rows = []
+    # Afficher l'image HES basse résolution
+    ax.imshow(lowres_hes_np)
+    ax.set_title(f'Patient {patient_id} - Vue d\'ensemble des régions avec métriques de registration', 
+                 fontsize=18, fontweight='bold', pad=20)
+    ax.axis('off')
     
-    # Pour chaque patient
-    for patient_id in sorted(registration_metrics.keys()):
-        patient_data = registration_metrics[patient_id]
+    # Parcourir toutes les régions et dessiner les rectangles avec métriques
+    for region_info in regions_info:
+        region_idx = region_info['idx']
+        x_lr = region_info['x_lr']
+        y_lr = region_info['y_lr']
+        size_lr = region_info['size_lr']
+        metrics = region_info['metrics']
         
-        # Créer une ligne pour les ratios
-        row = {'Patient_Type': f"{patient_id}_HES/CD30"}
+        # Couleur du rectangle selon le statut
+        if metrics['status'] == 'success':
+            edge_color = 'lime'
+            face_color = 'lime'
+            alpha_face = 0.1
+            linewidth = 3
+        else:
+            edge_color = 'red'
+            face_color = 'red'
+            alpha_face = 0.15
+            linewidth = 2
         
-        # Pour chaque région
-        for region_idx in sorted(patient_data.keys()):
-            metrics = patient_data[region_idx]
-            ratio = metrics['ratio']
-            status = metrics['status']
-            
-            # Formater la valeur: ratio ou indication d'échec
-            if status == 'success':
-                row[f"Region_{region_idx}"] = f"{ratio:.3f}"
-            else:
-                row[f"Region_{region_idx}"] = f"0.000 ({status})"
+        # Dessiner le rectangle de la région
+        rect = patches.Rectangle(
+            (x_lr, y_lr), 
+            size_lr, 
+            size_lr,
+            linewidth=linewidth,
+            edgecolor=edge_color,
+            facecolor=face_color,
+            alpha=alpha_face
+        )
+        ax.add_patch(rect)
         
-        rows.append(row)
-    
-    # Créer le DataFrame
-    df = pd.DataFrame(rows)
-    
-    # Réorganiser les colonnes pour avoir Patient_Type en premier, puis les régions triées
-    region_cols = sorted([col for col in df.columns if col.startswith('Region_')], 
-                        key=lambda x: int(x.split('_')[1]))
-    df = df[['Patient_Type'] + region_cols]
-    
-    # Sauvegarder le CSV
-    df.to_csv(csv_path, index=False)
-    print(f"\n✓ CSV de métriques sauvegardé: {csv_path}")
-    
-    # Créer aussi un CSV détaillé avec inliers et total
-    detailed_csv_path = os.path.join(output_folder, "registration_metrics_detailed.csv")
-    detailed_rows = []
-    
-    for patient_id in sorted(registration_metrics.keys()):
-        patient_data = registration_metrics[patient_id]
+        # Préparer le texte à afficher
+        if metrics['status'] == 'success':
+            text = f"Région {region_idx}\n{metrics['inliers']} inliers\nRatio: {metrics['ratio']:.3f}"
+            text_color = 'white'
+            bbox_color = 'green'
+        else:
+            text = f"Région {region_idx}\nÉchec"
+            text_color = 'white'
+            bbox_color = 'darkred'
         
-        for region_idx in sorted(patient_data.keys()):
-            metrics = patient_data[region_idx]
-            detailed_rows.append({
-                'Patient': patient_id,
-                'Type': 'HES/CD30',
-                'Region': region_idx,
-                'Inliers': metrics['inliers'],
-                'Total_Matches': metrics['total_matches'],
-                'Ratio': metrics['ratio'],
-                'Status': metrics['status']
-            })
+        # Position du texte au centre de la région
+        text_x = x_lr + size_lr / 2
+        text_y = y_lr + size_lr / 2
+        
+        # Afficher le texte avec un fond
+        ax.text(
+            text_x, 
+            text_y, 
+            text,
+            fontsize=12,
+            fontweight='bold',
+            color=text_color,
+            ha='center',
+            va='center',
+            bbox=dict(
+                boxstyle='round,pad=0.5',
+                facecolor=bbox_color,
+                alpha=0.8,
+                edgecolor='white',
+                linewidth=2
+            )
+        )
     
-    df_detailed = pd.DataFrame(detailed_rows)
-    df_detailed.to_csv(detailed_csv_path, index=False)
-    print(f"✓ CSV détaillé sauvegardé: {detailed_csv_path}")
+    plt.tight_layout()
     
-    # Logger le CSV dans wandb
+    # Sauvegarder la figure
+    output_path = os.path.join(output_folder, f'{patient_id}_regions_overview.png')
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    print(f"\n✓ Vue d'ensemble sauvegardée: {output_path}")
+    
+    # Logger dans wandb
     wandb.log({
-        "registration_metrics_table": wandb.Table(dataframe=df),
-        "registration_metrics_detailed": wandb.Table(dataframe=df_detailed)
+        f"{patient_id}/overview": wandb.Image(output_path)
     })
     
-    return csv_path, detailed_csv_path
+    return output_path
 
 
 def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
@@ -530,8 +463,8 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
     print("\n[3/4] Calcul du masque de tissu...")
     mask_hes = compute_tissue_mask(lowres_hes)
     
-    # Trouver toutes les régions avec du tissu
-    print("\n[4/4] Recherche de toutes les régions avec tissu...")
+    # Trouver toutes les régions avec du tissu et effectuer la registration
+    print("\n[4/4] Registration des régions avec tissu...")
     w0_hes, h0_hes = slide_hes.level_dimensions[0]
     downsample_hes = int(slide_hes.level_downsamples[lowres_level])
     downsample_cd30 = int(slide_cd30.level_downsamples[lowres_level])
@@ -542,6 +475,7 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
     
     regions_processed = 0
     region_idx = 0
+    regions_info = []
     
     for region_y in range(0, h0_hes, stride):
         for region_x in range(0, w0_hes, stride):
@@ -583,12 +517,24 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
             region_cd30_lr = lowres_cd30_np[region_y_cd30_lr:region_y_cd30_lr+region_size_cd30_lr, 
                                            region_x_cd30_lr:region_x_cd30_lr+region_size_cd30_lr]
             
-            print(f">>> Génération de la visualisation pour région {region_idx}: Détection ORB et appariement")
-            transformation, aligned_img, inliers, success = visualize_orb_detection_and_matching(
+            print(f">>> Registration de la région {region_idx}...")
+            metrics = perform_region_registration(
                 region_hes_lr, region_cd30_lr, patient_id, region_idx
             )
             
-            if success:
+            # Enregistrer les métriques
+            registration_metrics[patient_id][region_idx] = metrics
+            
+            # Stocker les informations de la région pour la visualisation
+            regions_info.append({
+                'idx': region_idx,
+                'x_lr': region_x_lr,
+                'y_lr': region_y_lr,
+                'size_lr': region_size_lr,
+                'metrics': metrics
+            })
+            
+            if metrics['status'] == 'success':
                 regions_processed += 1
                 print(f"✓ Région {region_idx} traitée avec succès")
             else:
@@ -598,6 +544,11 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
     
     slide_hes.close()
     slide_cd30.close()
+    
+    # Générer la figure de vue d'ensemble
+    if regions_info:
+        print(f"\n[VISUALISATION] Génération de la vue d'ensemble pour {patient_id}...")
+        generate_patient_overview_figure(lowres_hes_np, patient_id, regions_info)
     
     # Logger le résumé du patient
     wandb.log({
@@ -671,12 +622,6 @@ if pairs:
         "summary/avg_regions_per_patient": total_regions / total_patients if total_patients > 0 else 0,
     })
     
-    # Générer les CSV de métriques
-    print(f"\n{'='*80}")
-    print("GÉNÉRATION DES MÉTRIQUES CSV")
-    print(f"{'='*80}")
-    csv_path, detailed_csv_path = generate_registration_csv(output_folder)
-    
     print(f"\n{'='*80}")
     print(f"✓ TRAITEMENT TERMINÉ")
     print(f"{'='*80}")
@@ -684,8 +629,6 @@ if pairs:
     print(f"Patients avec régions réussies: {patients_with_regions}")
     print(f"Total de régions traitées: {total_regions}")
     print(f"Les visualisations sont sauvegardées dans: {output_folder}")
-    print(f"Métriques CSV: {csv_path}")
-    print(f"Métriques détaillées: {detailed_csv_path}")
     print(f"{'='*80}")
     
     # Finir la session wandb

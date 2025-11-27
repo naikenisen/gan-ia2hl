@@ -13,7 +13,7 @@ warnings.filterwarnings('ignore')
 
 # Configuration
 input_folder = "/gold/data_feasibility"
-output_file = "alignment_overview.jpg"
+output_file = "regions.jpg"
 
 # Liste des patients à traiter
 patient_ids = ["AHL002"]

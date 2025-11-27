@@ -32,14 +32,17 @@ lowres_level = 2
 # Initialiser wandb
 wandb.init(
     project="ia2hl-preprocessing",
-    name="orb-registration-visualization",
+    name="akaze-registration-visualization",
     config={
+        "feature_detector": "AKAZE",
         "patch_size": patch_size,
         "region_size": region_size,
         "overlap_percent": overlap_percent,
         "lowres_level": lowres_level,
         "input_folder": input_folder,
-        "output_folder": output_folder
+        "output_folder": output_folder,
+        "min_inliers": 20,
+        "spatial_coherence": True
     }
 )
 
@@ -77,10 +80,10 @@ def perform_region_registration(img_fixed, img_moving, patient_id, region_idx):
     gray_fixed = cv2.cvtColor(img_fixed, cv2.COLOR_RGB2GRAY)
     gray_moving = cv2.cvtColor(img_moving, cv2.COLOR_RGB2GRAY)
     
-    # Détection ORB
-    orb = cv2.ORB_create(nfeatures=5000)
-    kp1, desc1 = orb.detectAndCompute(gray_fixed, None)
-    kp2, desc2 = orb.detectAndCompute(gray_moving, None)
+    # Détection AKAZE (meilleur que ORB pour l'histologie)
+    akaze = cv2.AKAZE_create()
+    kp1, desc1 = akaze.detectAndCompute(gray_fixed, None)
+    kp2, desc2 = akaze.detectAndCompute(gray_moving, None)
     
     # Logger la détection des keypoints
     wandb.log({
@@ -101,12 +104,13 @@ def perform_region_registration(img_fixed, img_moving, patient_id, region_idx):
             'transform': None
         }
     
-    # Matching
+    # Matching (AKAZE utilise des descripteurs binaires comme ORB)
     bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
     matches = bf.match(desc1, desc2)
     matches = sorted(matches, key=lambda x: x.distance)
     
-    num_good_matches = min(len(matches), max(50, int(len(matches) * 0.15)))
+    # AKAZE produit généralement plus de matches de qualité, on peut être plus sélectif
+    num_good_matches = min(len(matches), max(50, int(len(matches) * 0.20)))
     good_matches = matches[:num_good_matches]
     
     # Logger les correspondances
@@ -408,10 +412,10 @@ def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
     gray_hes = cv2.cvtColor(lowres_hes_np, cv2.COLOR_RGB2GRAY)
     gray_cd30 = cv2.cvtColor(lowres_cd30_np, cv2.COLOR_RGB2GRAY)
     
-    # Détection ORB sur la lame entière
-    orb = cv2.ORB_create(nfeatures=8000)  # Plus de features pour la lame entière
-    kp1, desc1 = orb.detectAndCompute(gray_hes, None)
-    kp2, desc2 = orb.detectAndCompute(gray_cd30, None)
+    # Détection AKAZE sur la lame entière (meilleur que ORB pour l'histologie)
+    akaze = cv2.AKAZE_create()
+    kp1, desc1 = akaze.detectAndCompute(gray_hes, None)
+    kp2, desc2 = akaze.detectAndCompute(gray_cd30, None)
     
     print(f"  Points détectés - HES: {len(kp1) if kp1 else 0}, CD30: {len(kp2) if kp2 else 0}")
     
@@ -426,12 +430,13 @@ def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
         wandb.log({f"{patient_id}/global/status": "failed_detection"})
         return None, lowres_cd30_np
     
-    # Matching
+    # Matching (AKAZE utilise des descripteurs binaires)
     bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
     matches = bf.match(desc1, desc2)
     matches = sorted(matches, key=lambda x: x.distance)
     
-    num_good_matches = min(len(matches), max(100, int(len(matches) * 0.20)))
+    # AKAZE produit généralement plus de matches de qualité, on peut être plus sélectif
+    num_good_matches = min(len(matches), max(100, int(len(matches) * 0.25)))
     good_matches = matches[:num_good_matches]
     
     print(f"  Correspondances: {len(matches)} total, {len(good_matches)} sélectionnées")
@@ -689,7 +694,7 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
 # ============================================================================
 
 print(f"\n{'='*80}")
-print("VISUALISATION DU PROCESSUS ORB + RANSAC")
+print("VISUALISATION DU PROCESSUS AKAZE + RANSAC + COHÉRENCE SPATIALE")
 print(f"{'='*80}")
 print(f"Dossier d'entrée: {input_folder}")
 print(f"Dossier de sortie: {output_folder}")

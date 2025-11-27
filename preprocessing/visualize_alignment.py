@@ -184,7 +184,7 @@ plt.suptitle('Alignement des lames H&E et CD30 - Régions sélectionnées',
 plt.tight_layout()
 
 # Sauvegarder en haute qualité
-plt.savefig(output_file, dpi=300, bbox_inches='tight', format='jpg', quality=95)
+plt.savefig(output_file, dpi=300, bbox_inches='tight', format='jpg')
 print(f"\n✓ Figure sauvegardée: {output_file}")
 print(f"  Format: JPEG haute qualité (300 DPI)")
 print(f"  Patients inclus: {', '.join([d['patient_id'] for d in all_images])}")

@@ -15,7 +15,7 @@ input_folder = "/gold/data_feasibility"
 output_file = "alignment_overview.jpg"
 
 # Liste des patients à traiter
-patient_ids = ["AHL002"]
+patient_ids = ["AHL002", "AHL004"]
 
 patch_size = 2000
 region_size = 12000

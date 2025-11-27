@@ -64,8 +64,8 @@ print(f"\n✓ {len(svs_files)} lame(s) sélectionnée(s) pour visualisation\n")
 
 level = 2
 
-def compute_tissue_mask(img_rgb):
-    img_np = np.array(img_rgb)
+def compute_tissue_mask(img_np):
+    """Calcule le masque de tissu à partir d'un array numpy RGB."""
     hsv = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
     sat = hsv[:, :, 1]
     _, mask = cv2.threshold(sat, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -82,15 +82,21 @@ plt.figure(figsize=(5 * cols, 5 * rows))
 
 for idx, filename in enumerate(tqdm(svs_files, desc="Processing slides")):
     path = os.path.join(folder, filename)
+    print(f"\n[{idx+1}/{len(svs_files)}] Ouverture de {filename}...")
     slide = openslide.OpenSlide(path)
 
     # low-res
     w, h = slide.level_dimensions[level]
+    print(f"  Dimensions au niveau {level}: {w}x{h}")
+    print(f"  Lecture de la région...")
     img = slide.read_region((0, 0), level, (w, h)).convert("RGB")
 
     # mask
-    mask = compute_tissue_mask(img)
+    print(f"  Calcul du masque de tissu...")
     img_np = np.array(img)
+    mask = compute_tissue_mask(img_np)
+    
+    print(f"  Création de l'image masquée...")
     img_masked = img_np.copy()
     img_masked[mask == 0] = 255
 
@@ -99,8 +105,9 @@ for idx, filename in enumerate(tqdm(svs_files, desc="Processing slides")):
     col = idx % cols
 
     # --- Plot low-res ---
+    print(f"  Génération des plots...")
     plt.subplot(rows, cols, base_row * cols + col + 1)
-    plt.imshow(img)
+    plt.imshow(img_np)
     plt.title(f"{filename}\nLow-res", fontsize=9)
     plt.axis("off")
 
@@ -115,6 +122,12 @@ for idx, filename in enumerate(tqdm(svs_files, desc="Processing slides")):
     plt.imshow(img_masked)
     plt.title("Masked image", fontsize=9)
     plt.axis("off")
+    
+    # Fermer le slide pour libérer la mémoire
+    slide.close()
+    print(f"  ✓ Slide {filename} traité")
 
+print("\nSauvegarde de l'image finale...")
 plt.tight_layout()
 plt.savefig("preprocessing/pannel.png", dpi=250, bbox_inches="tight")
+print("✓ Terminé! Image sauvegardée dans preprocessing/pannel.png")

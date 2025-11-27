@@ -47,6 +47,51 @@ def apply_otsu_segmentation(img_rgb):
     img_segmented[mask == 0] = 255  # Mettre le background en blanc
     return img_segmented, mask
 
+def extract_contours(mask, thickness=3):
+    """
+    Extrait les contours d'un masque binaire.
+    
+    Args:
+        mask: Masque binaire (0 ou 255)
+        thickness: Épaisseur des contours en pixels
+    
+    Returns:
+        contour_img: Image RGB avec les contours en noir sur fond blanc
+    """
+    # Détecter les contours avec Canny
+    edges = cv2.Canny(mask, 50, 150)
+    
+    # Dilater légèrement pour avoir des contours plus visibles
+    kernel = np.ones((thickness, thickness), np.uint8)
+    edges_thick = cv2.dilate(edges, kernel, iterations=1)
+    
+    # Créer une image RGB: contours en noir, fond en blanc
+    contour_img = np.ones((mask.shape[0], mask.shape[1], 3), dtype=np.uint8) * 255
+    contour_img[edges_thick > 0] = [0, 0, 0]  # Noir pour les contours
+    
+    return contour_img, edges_thick
+
+def create_contour_overlay(hes_contours, cd30_contours):
+    """
+    Crée un overlay des contours: H&E en rouge, CD30 en vert.
+    Zones bien alignées = jaune.
+    """
+    overlay = np.ones_like(hes_contours) * 255
+    
+    # H&E en rouge
+    hes_mask = np.any(hes_contours < 200, axis=2)
+    overlay[hes_mask] = [255, 0, 0]
+    
+    # CD30 en vert
+    cd30_mask = np.any(cd30_contours < 200, axis=2)
+    overlay[cd30_mask] = [0, 255, 0]
+    
+    # Intersection en jaune
+    intersection = hes_mask & cd30_mask
+    overlay[intersection] = [255, 255, 0]
+    
+    return overlay
+
 def create_overlay(hes_img, cd30_img, alpha=0.6):
     """
     Crée une image overlay pour visualiser l'alignement.
@@ -114,7 +159,7 @@ def create_difference_map(hes_img, cd30_img):
     
     return diff_colored
 
-def register_images_elastix(fixed_img_np, moving_img_np, fixed_mask=None, moving_mask=None):
+def register_images_elastix(fixed_img_np, moving_img_np, fixed_mask=None, moving_mask=None, use_contours=True):
     """
     Recale l'image moving sur l'image fixed avec SimpleITK.
     Utilise ImageRegistrationMethod avec transformation affine.
@@ -124,16 +169,41 @@ def register_images_elastix(fixed_img_np, moving_img_np, fixed_mask=None, moving
         moving_img_np: Image à recaler (CD30 segmentée) en numpy array RGB
         fixed_mask: Masque optionnel pour l'image fixe
         moving_mask: Masque optionnel pour l'image moving
+        use_contours: Si True, effectue la registration sur les contours plutôt que l'intérieur
     
     Returns:
         registered_img_np: Image CD30 recalée en numpy array RGB
         transform: Transformation appliquée
+        fixed_contours: Contours de l'image fixe (si use_contours=True)
+        moving_contours_registered: Contours recalés (si use_contours=True)
     """
-    print("  Registration SimpleITK en cours (sur images segmentées)...")
-    
-    # Convertir en niveaux de gris pour la registration
-    fixed_gray = cv2.cvtColor(fixed_img_np, cv2.COLOR_RGB2GRAY).astype(np.float32)
-    moving_gray = cv2.cvtColor(moving_img_np, cv2.COLOR_RGB2GRAY).astype(np.float32)
+    if use_contours:
+        print("  Registration SimpleITK en cours (sur les CONTOURS)...")
+        
+        # Extraire les contours des masques
+        if fixed_mask is None:
+            fixed_mask = compute_tissue_mask(fixed_img_np)
+        if moving_mask is None:
+            moving_mask = compute_tissue_mask(moving_img_np)
+        
+        fixed_contours, fixed_edges = extract_contours(fixed_mask, thickness=5)
+        moving_contours, moving_edges = extract_contours(moving_mask, thickness=5)
+        
+        # Utiliser les contours pour la registration
+        fixed_gray = cv2.cvtColor(fixed_contours, cv2.COLOR_RGB2GRAY).astype(np.float32)
+        moving_gray = cv2.cvtColor(moving_contours, cv2.COLOR_RGB2GRAY).astype(np.float32)
+        
+        # Inverser les valeurs pour que les contours soient "bright" (255) sur fond noir (0)
+        # Car l'algorithme cherche à aligner les zones brillantes
+        fixed_gray = 255 - fixed_gray
+        moving_gray = 255 - moving_gray
+        
+    else:
+        print("  Registration SimpleITK en cours (sur images segmentées)...")
+        
+        # Convertir en niveaux de gris pour la registration
+        fixed_gray = cv2.cvtColor(fixed_img_np, cv2.COLOR_RGB2GRAY).astype(np.float32)
+        moving_gray = cv2.cvtColor(moving_img_np, cv2.COLOR_RGB2GRAY).astype(np.float32)
     
     # Convertir en images SimpleITK
     fixed_sitk = sitk.GetImageFromArray(fixed_gray)
@@ -180,7 +250,8 @@ def register_images_elastix(fixed_img_np, moving_img_np, fixed_mask=None, moving
     
     print(f"    Optimiseur: {registration_method.GetOptimizerStopConditionDescription()}")
     
-    # Appliquer la transformation à chaque canal RGB
+    # Appliquer la transformation à l'image originale (pas aux contours)
+    # On veut recaler l'image complète, mais en utilisant la transformation calculée sur les contours
     registered_channels = []
     for channel_idx in range(3):
         channel_img = moving_img_np[:, :, channel_idx].astype(np.float32)
@@ -203,7 +274,31 @@ def register_images_elastix(fixed_img_np, moving_img_np, fixed_mask=None, moving
     
     print("  ✓ Registration terminée")
     
-    return registered_img_np, final_transform
+    # Si on a utilisé les contours, les retourner aussi
+    if use_contours:
+        # Appliquer la même transformation aux contours pour visualisation
+        moving_contours_registered_channels = []
+        for channel_idx in range(3):
+            channel_img = moving_contours[:, :, channel_idx].astype(np.float32)
+            channel_sitk = sitk.GetImageFromArray(channel_img)
+            
+            resampled = sitk.Resample(
+                channel_sitk,
+                fixed_sitk,
+                final_transform,
+                sitk.sitkLinear,
+                255.0,  # Background blanc pour les contours
+                channel_sitk.GetPixelID()
+            )
+            
+            registered_channel = sitk.GetArrayFromImage(resampled)
+            moving_contours_registered_channels.append(registered_channel)
+        
+        moving_contours_registered = np.stack(moving_contours_registered_channels, axis=-1).astype(np.uint8)
+        
+        return registered_img_np, final_transform, fixed_contours, moving_contours_registered
+    else:
+        return registered_img_np, final_transform, None, None
 
 def process_patient(patient_id):
     """Traite un patient et retourne les images annotées."""
@@ -234,15 +329,22 @@ def process_patient(patient_id):
     lowres_cd30_segmented, mask_cd30 = apply_otsu_segmentation(lowres_cd30_np)
     print("  ✓ Segmentation terminée")
     
-    # ÉTAPE 2: Registration sur les images segmentées
-    print("  Démarrage de la registration Elastix sur images segmentées...")
-    lowres_cd30_registered, transform_params = register_images_elastix(
+    # ÉTAPE 2: Extraction des contours
+    print("  Extraction des contours...")
+    hes_contours, _ = extract_contours(mask_hes, thickness=5)
+    cd30_contours_original, _ = extract_contours(mask_cd30, thickness=5)
+    print("  ✓ Contours extraits")
+    
+    # ÉTAPE 3: Registration basée sur les CONTOURS
+    print("  Démarrage de la registration Elastix sur les CONTOURS...")
+    lowres_cd30_registered, transform_params, fixed_contours, moving_contours_registered = register_images_elastix(
         lowres_hes_segmented, 
         lowres_cd30_segmented,
         mask_hes,
-        mask_cd30
+        mask_cd30,
+        use_contours=True
     )
-    print("  ✓ CD30 segmenté recalé sur H&E segmenté")
+    print("  ✓ CD30 recalé sur H&E en utilisant l'alignement des contours")
     
     # Dimensions
     w0_hes, h0_hes = slide_hes.level_dimensions[0]
@@ -286,16 +388,20 @@ def process_patient(patient_id):
     
     print(f"  Trouvé {len(valid_regions)} régions valides")
     
-    # Créer des visualisations pour mettre en évidence la registration (sur images segmentées)
-    # 1. Overlays colorés (Magenta/Vert)
+    # Créer des visualisations pour mettre en évidence la registration
+    # 1. Overlays de contours (Rouge/Vert) - PRINCIPAL pour visualiser l'alignement des contours
+    contours_overlay_no_reg = create_contour_overlay(hes_contours, cd30_contours_original)
+    contours_overlay_registered = create_contour_overlay(fixed_contours, moving_contours_registered)
+    
+    # 2. Overlays colorés sur images segmentées (Magenta/Vert)
     overlay_no_reg = create_overlay(lowres_hes_segmented, lowres_cd30_segmented)
     overlay_registered = create_overlay(lowres_hes_segmented, lowres_cd30_registered)
     
-    # 2. Damiers (Checkerboard)
+    # 3. Damiers (Checkerboard)
     checkerboard_no_reg = create_checkerboard(lowres_hes_segmented, lowres_cd30_segmented, square_size=300)
     checkerboard_registered = create_checkerboard(lowres_hes_segmented, lowres_cd30_registered, square_size=300)
     
-    # 3. Cartes de différence (heatmaps)
+    # 4. Cartes de différence (heatmaps)
     diff_map_no_reg = create_difference_map(lowres_hes_segmented, lowres_cd30_segmented)
     diff_map_registered = create_difference_map(lowres_hes_segmented, lowres_cd30_registered)
     
@@ -307,6 +413,11 @@ def process_patient(patient_id):
         'hes': lowres_hes_segmented,
         'cd30_no_reg': lowres_cd30_segmented,
         'cd30_registered': lowres_cd30_registered,
+        'hes_contours': hes_contours,
+        'cd30_contours_original': cd30_contours_original,
+        'cd30_contours_registered': moving_contours_registered,
+        'contours_overlay_no_reg': contours_overlay_no_reg,
+        'contours_overlay_registered': contours_overlay_registered,
         'overlay_no_reg': overlay_no_reg,
         'overlay_registered': overlay_registered,
         'checkerboard_no_reg': checkerboard_no_reg,
@@ -352,32 +463,32 @@ fig, axes = plt.subplots(3, 3, figsize=(20, 18))
 for idx, data in enumerate(all_images):
     patient_id = data['patient_id']
     
-    # RANGÉE 1: Images sources segmentées
-    axes[0, 0].imshow(data['hes'])
-    axes[0, 0].set_title(f"{patient_id} - H&E Segmented (Reference)", fontsize=14, fontweight='bold')
+    # RANGÉE 1: CONTOURS - Visualisation clé de l'alignement des bords
+    axes[0, 0].imshow(data['hes_contours'])
+    axes[0, 0].set_title(f"{patient_id} - H&E Contours (Reference)", fontsize=14, fontweight='bold')
     axes[0, 0].axis('off')
     
-    axes[0, 1].imshow(data['cd30_no_reg'])
-    axes[0, 1].set_title("CD30 Segmented (Unregistered)", fontsize=14, fontweight='bold')
+    axes[0, 1].imshow(data['contours_overlay_no_reg'])
+    axes[0, 1].set_title("Contours BEFORE Registration\n(Red=H&E, Green=CD30, Yellow=Overlap)", 
+                        fontsize=12, fontweight='bold', color='red')
     axes[0, 1].axis('off')
     
-    axes[0, 2].imshow(data['cd30_registered'])
-    axes[0, 2].set_title("CD30 Segmented (Registered)", fontsize=14, fontweight='bold', color='green')
+    axes[0, 2].imshow(data['contours_overlay_registered'])
+    axes[0, 2].set_title("Contours AFTER Registration\n(Red=H&E, Green=CD30, Yellow=Overlap)", 
+                        fontsize=12, fontweight='bold', color='green')
     axes[0, 2].axis('off')
     
-    # RANGÉE 2: Overlays colorés (mise en évidence de l'alignement)
-    axes[1, 0].imshow(data['overlay_no_reg'])
-    axes[1, 0].set_title("Before Registration\n(Magenta=H&E, Green=CD30)", fontsize=12, fontweight='bold', color='red')
+    # RANGÉE 2: Images segmentées complètes
+    axes[1, 0].imshow(data['hes'])
+    axes[1, 0].set_title("H&E Segmented", fontsize=12, fontweight='bold')
     axes[1, 0].axis('off')
     
-    axes[1, 1].imshow(data['overlay_registered'])
-    axes[1, 1].set_title("After Registration\n(Magenta=H&E, Green=CD30)", fontsize=12, fontweight='bold', color='green')
+    axes[1, 1].imshow(data['cd30_no_reg'])
+    axes[1, 1].set_title("CD30 Segmented (Before)", fontsize=12, fontweight='bold')
     axes[1, 1].axis('off')
     
-    # Texte explicatif au centre
-    axes[1, 2].text(0.5, 0.5, "Better alignment\n→ More yellow/white\n\nMisalignment\n→ Magenta or Green", 
-                    ha='center', va='center', fontsize=14, fontweight='bold',
-                    bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+    axes[1, 2].imshow(data['cd30_registered'])
+    axes[1, 2].set_title("CD30 Segmented (After)", fontsize=12, fontweight='bold', color='green')
     axes[1, 2].axis('off')
     
     # RANGÉE 3: Visualisations avancées
@@ -393,7 +504,7 @@ for idx, data in enumerate(all_images):
     axes[2, 2].set_title("Difference Map\n(Blue=Good, Red=Poor)", fontsize=12, fontweight='bold')
     axes[2, 2].axis('off')
 
-plt.suptitle('Multi-Modal Image Registration on Otsu-Segmented Images\nH&E to CD30 Alignment via Affine Transformation (Mattes Mutual Information)', 
+plt.suptitle('Contour-Based Multi-Modal Image Registration (Otsu Segmentation)\nH&E to CD30 Alignment via Affine Transform on Edge Features', 
              fontsize=16, fontweight='bold', y=0.995)
 plt.tight_layout()
 
@@ -403,16 +514,18 @@ print(f"\n✓ Figure sauvegardée: {output_file}")
 print(f"  Format: JPEG haute qualité (300 DPI)")
 print(f"  Patients inclus: {', '.join([d['patient_id'] for d in all_images])}")
 print("\n" + "="*80)
-print("STRUCTURE DE LA FIGURE (3×3 grid) - IMAGES SEGMENTÉES PAR OTSU")
+print("STRUCTURE DE LA FIGURE (3×3 grid) - REGISTRATION BASÉE SUR LES CONTOURS")
 print("="*80)
-print("  RANGÉE 1: Images sources segmentées")
-print("    - H&E segmenté (référence) | CD30 segmenté brut | CD30 segmenté recalé")
+print("  RANGÉE 1: CONTOURS - Visualisation de l'alignement des bords")
+print("    - Contours H&E | Overlay AVANT | Overlay APRÈS")
+print("    - Rouge=H&E, Vert=CD30, Jaune=Superposition parfaite")
 print("")
-print("  RANGÉE 2: Overlays colorés (IMPACT VISUEL MAXIMAL)")
-print("    - Avant registration | Après registration | Légende")
-print("    - Magenta + Vert = Jaune/Blanc (bon alignement)")
+print("  RANGÉE 2: Images segmentées complètes")
+print("    - H&E segmenté | CD30 avant | CD30 après registration")
 print("")
-print("  RANGÉE 3: Visualisations techniques")
+print("  RANGÉE 3: Visualisations de contrôle qualité")
 print("    - Damier avant | Damier après | Carte de différence")
 print("="*80)
-print("\n✓ Registration et visualisation sur images segmentées terminées!")
+print("\n✓ Registration basée sur les CONTOURS terminée!")
+print("  Méthode: Alignment des bords tissulaires plutôt que des intensités internes")
+print("  Avantage: Meilleure correspondance géométrique des structures")

@@ -16,7 +16,7 @@ input_folder = "/gold/data_feasibility"
 output_file = "alignment_overview.jpg"
 
 # Liste des patients à traiter
-patient_ids = ["AHL002", "AHL004"]
+patient_ids = ["AHL002"]
 
 patch_size = 2000
 region_size = 12000
@@ -69,25 +69,30 @@ def register_images_elastix(fixed_img_np, moving_img_np):
     fixed_sitk = sitk.GetImageFromArray(fixed_gray)
     moving_sitk = sitk.GetImageFromArray(moving_gray)
     
-    # Créer manuellement le parameter map pour registration affine
-    parameter_map = sitk.ParameterMap()
-    parameter_map['Registration'] = ['MultiResolutionRegistration']
-    parameter_map['Transform'] = ['AffineTransform']
-    parameter_map['Metric'] = ['AdvancedMattesMutualInformation']
-    parameter_map['Optimizer'] = ['AdaptiveStochasticGradientDescent']
-    parameter_map['ResampleInterpolator'] = ['FinalBSplineInterpolator']
-    parameter_map['Resampler'] = ['DefaultResampler']
-    parameter_map['FixedImagePyramid'] = ['FixedSmoothingImagePyramid']
-    parameter_map['MovingImagePyramid'] = ['MovingSmoothingImagePyramid']
-    parameter_map['NumberOfResolutions'] = ['4']
-    parameter_map['MaximumNumberOfIterations'] = ['512']
-    parameter_map['NumberOfSpatialSamples'] = ['5000']
-    parameter_map['NewSamplesEveryIteration'] = ['true']
-    parameter_map['ImageSampler'] = ['Random']
-    parameter_map['BSplineInterpolationOrder'] = ['1']
-    parameter_map['FinalBSplineInterpolationOrder'] = ['3']
-    parameter_map['DefaultPixelValue'] = ['0']
-    parameter_map['WriteResultImage'] = ['false']
+    # Créer le parameter map pour registration affine avec VectorOfParameterMap
+    parameter_map = sitk.VectorOfParameterMap()
+    
+    # Paramètres de registration affine
+    affine_params = {
+        'Registration': ['MultiResolutionRegistration'],
+        'Transform': ['AffineTransform'],
+        'Metric': ['AdvancedMattesMutualInformation'],
+        'Optimizer': ['AdaptiveStochasticGradientDescent'],
+        'ResampleInterpolator': ['FinalBSplineInterpolator'],
+        'Resampler': ['DefaultResampler'],
+        'FixedImagePyramid': ['FixedSmoothingImagePyramid'],
+        'MovingImagePyramid': ['MovingSmoothingImagePyramid'],
+        'NumberOfResolutions': ['4'],
+        'MaximumNumberOfIterations': ['512'],
+        'NumberOfSpatialSamples': ['5000'],
+        'NewSamplesEveryIteration': ['true'],
+        'ImageSampler': ['Random'],
+        'BSplineInterpolationOrder': ['1'],
+        'FinalBSplineInterpolationOrder': ['3'],
+        'DefaultPixelValue': ['0'],
+        'WriteResultImage': ['false']
+    }
+    parameter_map.append(affine_params)
     
     # Créer l'objet Elastix
     elastix = sitk.ElastixImageFilter()

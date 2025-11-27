@@ -64,4 +64,4 @@ for idx, filename in enumerate(tqdm(svs_files, desc="Processing slides")):
     plt.axis("off")
 
 plt.tight_layout()
-plt.savefig("/otsu/pannel.png", dpi=250, bbox_inches="tight")
+plt.savefig("preprocessing/pannel.png", dpi=250, bbox_inches="tight")

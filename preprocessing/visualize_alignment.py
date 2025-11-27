@@ -189,7 +189,4 @@ print(f"\n✓ Figure sauvegardée: {output_file}")
 print(f"  Format: JPEG haute qualité (300 DPI)")
 print(f"  Patients inclus: {', '.join([d['patient_id'] for d in all_images])}")
 print(f"  Total régions: {sum([d['n_regions'] for d in all_images])}")
-
-plt.show()
-
 print("\n✓ Visualisation terminée!")

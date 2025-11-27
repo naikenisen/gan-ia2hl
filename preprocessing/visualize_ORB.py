@@ -454,13 +454,19 @@ for hes_file in hes_files:
 
 print(f"\n{len(pairs)} paires disponibles")
 
-# Traiter la première paire trouvée (ou vous pouvez choisir un patient spécifique)
+# Traiter une paire spécifique
 if pairs:
-    first_pair = list(pairs.items())[0]
-    patient_id, paths = first_pair
+    # Choisir le patient AHL004
+    target_patient = "AHL004"
     
-    print(f"\nTraitement de la paire: {patient_id}")
-    process_one_slide_pair_visualization(paths['hes'], paths['cd30'])
+    if target_patient in pairs:
+        patient_id = target_patient
+        paths = pairs[target_patient]
+        print(f"\nTraitement de la paire: {patient_id}")
+        process_one_slide_pair_visualization(paths['hes'], paths['cd30'])
+    else:
+        print(f"\n✗ Patient {target_patient} non trouvé dans les paires disponibles")
+        print(f"Paires disponibles: {list(pairs.keys())}")
     
     print(f"\n{'='*80}")
     print(f"✓ TERMINÉ")

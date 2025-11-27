@@ -24,9 +24,8 @@ os.makedirs(output_folder, exist_ok=True)
 # Dictionnaire global pour stocker les métriques de registration
 registration_metrics = defaultdict(lambda: defaultdict(dict))
 
-patch_size = 2000
 region_size = 12000
-overlap_percent = 0.20  # 20% de chevauchement entre les régions
+overlap_percent = 0.10  # 20% de chevauchement entre les régions
 lowres_level = 2
 
 # Initialiser wandb

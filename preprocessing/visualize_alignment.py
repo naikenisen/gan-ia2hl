@@ -41,6 +41,11 @@ def create_overlay(hes_img, cd30_img, alpha=0.5):
     Crée une image overlay pour visualiser l'alignement.
     H&E en rouge, CD30 en cyan.
     """
+    # S'assurer que les deux images ont la même taille
+    if hes_img.shape != cd30_img.shape:
+        # Redimensionner cd30 pour correspondre à hes
+        cd30_img = cv2.resize(cd30_img, (hes_img.shape[1], hes_img.shape[0]), interpolation=cv2.INTER_LINEAR)
+    
     overlay = np.zeros_like(hes_img)
     overlay[:, :, 0] = (hes_img[:, :, 0] * alpha).astype(np.uint8)  # Rouge pour H&E
     overlay[:, :, 1] = (cd30_img[:, :, 1] * alpha).astype(np.uint8)  # Cyan pour CD30

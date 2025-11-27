@@ -9,5 +9,5 @@ scikit-image
 Pillow
 wandb
 opencv-python
+opencv-contrib-python
 openslide-python
-SimpleITK

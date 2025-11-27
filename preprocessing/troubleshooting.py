@@ -75,8 +75,13 @@ def visualize_orb_detection_and_matching(img_fixed, img_moving, patient_id, regi
     gray_fixed = cv2.cvtColor(img_fixed, cv2.COLOR_RGB2GRAY)
     gray_moving = cv2.cvtColor(img_moving, cv2.COLOR_RGB2GRAY)
     
-    # Détection ORB
-    orb = cv2.ORB_create(nfeatures=5000)
+    # Amélioration du contraste avec CLAHE pour mieux détecter les features
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    gray_fixed = clahe.apply(gray_fixed)
+    gray_moving = clahe.apply(gray_moving)
+    
+    # Détection ORB avec plus de features pour régions difficiles
+    orb = cv2.ORB_create(nfeatures=10000)
     kp1, desc1 = orb.detectAndCompute(gray_fixed, None)
     kp2, desc2 = orb.detectAndCompute(gray_moving, None)
     
@@ -105,7 +110,8 @@ def visualize_orb_detection_and_matching(img_fixed, img_moving, patient_id, regi
     matches = bf.match(desc1, desc2)
     matches = sorted(matches, key=lambda x: x.distance)
     
-    num_good_matches = min(len(matches), max(50, int(len(matches) * 0.15)))
+    # Augmentation du ratio de good matches de 15% à 25% pour plus de robustesse
+    num_good_matches = min(len(matches), max(50, int(len(matches) * 0.25)))
     good_matches = matches[:num_good_matches]
     
     # Logger les correspondances
@@ -132,17 +138,18 @@ def visualize_orb_detection_and_matching(img_fixed, img_moving, patient_id, regi
     src_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 2)
     dst_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 2)
     
-    # RANSAC
+    # RANSAC avec paramètres plus permissifs
     try:
         model, inliers = ransac(
             (src_pts, dst_pts),
             AffineTransform,
             min_samples=3,
-            residual_threshold=5.0,
-            max_trials=1000
+            residual_threshold=8.0,  # Augmenté de 5.0 à 8.0 pour tolérer plus d'imprécision
+            max_trials=2000  # Augmenté de 1000 à 2000 pour plus de chances de trouver un bon modèle
         )
         
-        if model is None or np.sum(inliers) < 4:
+        # Réduction du seuil minimum d'inliers de 4 à 3 (minimum pour transformation affine)
+        if model is None or np.sum(inliers) < 3:
             print("RANSAC échoué")
             wandb.log({
                 f"{patient_id}/region_{region_idx}/status": "failed_ransac"
@@ -160,7 +167,24 @@ def visualize_orb_detection_and_matching(img_fixed, img_moving, patient_id, regi
         num_outliers = len(good_matches) - num_inliers
         inlier_ratio = num_inliers / len(good_matches)
         
-        print(f"✓ {num_inliers} inliers sur {len(good_matches)} matches")
+        # Affichage avec indicateur de qualité
+        if inlier_ratio >= 0.80:
+            quality = "EXCELLENT"
+            symbol = "✓✓✓"
+        elif inlier_ratio >= 0.60:
+            quality = "BON"
+            symbol = "✓✓"
+        elif inlier_ratio >= 0.40:
+            quality = "MOYEN"
+            symbol = "✓"
+        elif inlier_ratio >= 0.20:
+            quality = "FAIBLE"
+            symbol = "⚠"
+        else:
+            quality = "TRÈS FAIBLE"
+            symbol = "⚠⚠"
+        
+        print(f"{symbol} {num_inliers} inliers sur {len(good_matches)} matches (ratio: {inlier_ratio:.1%} - {quality})")
         
         # Logger les résultats RANSAC
         wandb.log({

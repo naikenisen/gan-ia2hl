@@ -290,9 +290,18 @@ def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
                                     quality=jpeg_quality, optimize=True)
                     
                     patch_count += 1
+                    total_patch_count += 1
+                    
+                    # Logger chaque patch dans wandb
+                    wandb.log({
+                        "patch_extracted": total_patch_count,
+                        "current_patient": patient_id,
+                        "current_region": region_index,
+                        "patch_x": x,
+                        "patch_y": y
+                    })
             
             print(f"    ✓ {patch_count} paires de patches extraites")
-            total_patch_count += patch_count
 
             wandb.log({
                 f"{patient_id}_region_{region_index}_patches": patch_count,

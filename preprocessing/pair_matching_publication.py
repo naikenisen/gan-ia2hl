@@ -8,7 +8,7 @@ import numpy as np
 # Configuration
 patient_ids = ["AHL001", "AHL002", "AHL004", "AHL006", "AHL011"]
 base_path = Path("/silver/ube/extract")
-output_file = "/coding/ia2hl/preprocessing/pair_matching_overview.jpg"
+output_file = "pair_matching_overview.jpg"
 
 # Nombre de paires à afficher par patient (réparties sur différentes régions)
 n_pairs_per_patient = 4

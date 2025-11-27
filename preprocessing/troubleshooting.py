@@ -34,7 +34,6 @@ wandb.init(
     name="akaze-registration-visualization",
     config={
         "feature_detector": "AKAZE",
-        "patch_size": patch_size,
         "region_size": region_size,
         "overlap_percent": overlap_percent,
         "lowres_level": lowres_level,

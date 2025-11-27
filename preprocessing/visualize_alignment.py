@@ -195,10 +195,13 @@ def process_patient(patient_id):
     colors = []
     for i in range(len(valid_regions)):
         # Générer des couleurs vives et distinctes
-        hue = int(i * 360 / len(valid_regions))
+        # OpenCV utilise Hue entre 0-179 (pas 0-360)
+        hue = int(i * 179 / max(len(valid_regions), 1))
         color_hsv = np.uint8([[[hue, 255, 255]]])
-        color_rgb = cv2.cvtColor(color_hsv, cv2.COLOR_HSV2RGB)[0][0]
-        colors.append(tuple(int(c) for c in color_rgb))
+        color_bgr = cv2.cvtColor(color_hsv, cv2.COLOR_HSV2BGR)[0][0]
+        # S'assurer que les valeurs sont dans la plage 0-255
+        color_bgr = tuple(np.clip(int(c), 0, 255) for c in color_bgr)
+        colors.append(color_bgr)
     
     # Stocker les couleurs dans les régions pour la légende
     for idx, region in enumerate(valid_regions):
@@ -313,6 +316,11 @@ print("CRÉATION DE LA FIGURE FINALE")
 print("="*80)
 
 n_patients = len(all_images)
+
+if n_patients == 0:
+    print("⚠ Aucun patient n'a été traité avec succès. Impossible de créer la figure.")
+    exit(1)
+
 fig, axes = plt.subplots(n_patients, 5, figsize=(30, 5*n_patients))
 
 # S'assurer que axes est un tableau 2D même avec un seul patient

@@ -76,6 +76,11 @@ def create_contour_overlay(hes_contours, cd30_contours):
     Crée un overlay des contours: H&E en rouge, CD30 en vert.
     Zones bien alignées = jaune.
     """
+    # S'assurer que les deux images ont la même taille
+    if hes_contours.shape != cd30_contours.shape:
+        # Redimensionner cd30 pour correspondre à hes
+        cd30_contours = cv2.resize(cd30_contours, (hes_contours.shape[1], hes_contours.shape[0]), interpolation=cv2.INTER_LINEAR)
+    
     overlay = np.ones_like(hes_contours) * 255
     
     # H&E en rouge

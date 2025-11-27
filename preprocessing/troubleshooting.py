@@ -144,17 +144,23 @@ def visualize_orb_detection_and_matching(img_fixed, img_moving, patient_id, regi
             max_trials=1000
         )
         
-        if model is None or np.sum(inliers) < 4:
-            print("RANSAC échoué")
+        # Seuil minimum de 20 inliers pour valider la registration
+        MIN_INLIERS = 20
+        
+        if model is None or np.sum(inliers) < MIN_INLIERS:
+            num_inliers_found = np.sum(inliers) if inliers is not None else 0
+            print(f"RANSAC échoué ou insuffisant: {num_inliers_found} inliers (minimum requis: {MIN_INLIERS})")
             wandb.log({
-                f"{patient_id}/region_{region_idx}/status": "failed_ransac"
+                f"{patient_id}/region_{region_idx}/status": "failed_ransac_insufficient_inliers",
+                f"{patient_id}/region_{region_idx}/inliers_found": int(num_inliers_found),
+                f"{patient_id}/region_{region_idx}/min_required": MIN_INLIERS
             })
             # Enregistrer les métriques d'échec
             registration_metrics[patient_id][region_idx] = {
-                'inliers': 0,
+                'inliers': int(num_inliers_found),
                 'total_matches': len(good_matches),
                 'ratio': 0.0,
-                'status': 'failed_ransac'
+                'status': f'failed_insufficient_inliers (found {num_inliers_found}, required {MIN_INLIERS})'
             }
             return None, None, None, False
         
@@ -162,7 +168,7 @@ def visualize_orb_detection_and_matching(img_fixed, img_moving, patient_id, regi
         num_outliers = len(good_matches) - num_inliers
         inlier_ratio = num_inliers / len(good_matches)
         
-        print(f"✓ {num_inliers} inliers sur {len(good_matches)} matches")
+        print(f"✓ {num_inliers} inliers sur {len(good_matches)} matches (seuil: {MIN_INLIERS})")
         
         # Logger les résultats RANSAC
         wandb.log({

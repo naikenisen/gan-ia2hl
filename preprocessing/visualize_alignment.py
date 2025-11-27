@@ -18,8 +18,8 @@ output_file = "alignment_overview.jpg"
 patient_ids = ["AHL002","AHL006"]
 
 patch_size = 2000
-region_size = 12000
-stride_region = 12000
+region_size = 15000
+stride_region = 15000
 lowres_level = 2
 tissue_threshold = 0.20
 
@@ -33,6 +33,61 @@ def compute_tissue_mask(img_rgb):
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
     return mask
+
+def compute_region_alignment(region_hes, region_cd30):
+    """
+    Calcule la transformation optimale (rotation + translation) entre deux régions.
+    Retourne l'angle de rotation en degrés et le score de correspondance.
+    """
+    # Convertir en niveaux de gris
+    gray_hes = cv2.cvtColor(region_hes, cv2.COLOR_RGB2GRAY)
+    gray_cd30 = cv2.cvtColor(region_cd30, cv2.COLOR_RGB2GRAY)
+    
+    # Détecter les features avec ORB
+    orb = cv2.ORB_create(nfeatures=1000)
+    
+    kp1, des1 = orb.detectAndCompute(gray_hes, None)
+    kp2, des2 = orb.detectAndCompute(gray_cd30, None)
+    
+    if des1 is None or des2 is None or len(kp1) < 10 or len(kp2) < 10:
+        return 0.0, 0.0  # Pas assez de features
+    
+    # Matcher les features
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    matches = bf.match(des1, des2)
+    
+    if len(matches) < 10:
+        return 0.0, 0.0  # Pas assez de correspondances
+    
+    # Trier les matches par distance
+    matches = sorted(matches, key=lambda x: x.distance)
+    
+    # Extraire les points correspondants
+    pts1 = np.float32([kp1[m.queryIdx].pt for m in matches[:100]]).reshape(-1, 2)
+    pts2 = np.float32([kp2[m.trainIdx].pt for m in matches[:100]]).reshape(-1, 2)
+    
+    try:
+        # Estimer la transformation affine avec RANSAC
+        model, inliers = ransac(
+            (pts1, pts2),
+            AffineTransform,
+            min_samples=3,
+            residual_threshold=10,
+            max_trials=1000
+        )
+        
+        # Extraire l'angle de rotation de la matrice affine
+        rotation_matrix = model.params[:2, :2]
+        angle_rad = np.arctan2(rotation_matrix[1, 0], rotation_matrix[0, 0])
+        angle_deg = np.degrees(angle_rad)
+        
+        # Score de correspondance = ratio d'inliers
+        score = np.sum(inliers) / len(matches)
+        
+        return angle_deg, score
+        
+    except:
+        return 0.0, 0.0
 
 def process_patient(patient_id):
     """Traite un patient et retourne les images annotées."""
@@ -91,17 +146,31 @@ def process_patient(patient_id):
             if region_x_cd30_lr + region_size_cd30_lr > w_lr_cd30 or region_y_cd30_lr + region_size_cd30_lr > h_lr_cd30:
                 continue
             
+            # Extraire les régions pour calculer l'alignement
+            region_hes_img = lowres_hes_np[region_y_lr:region_y_lr+region_size_lr, 
+                                           region_x_lr:region_x_lr+region_size_lr]
+            region_cd30_img = lowres_cd30_np[region_y_cd30_lr:region_y_cd30_lr+region_size_cd30_lr,
+                                             region_x_cd30_lr:region_x_cd30_lr+region_size_cd30_lr]
+            
+            # Calculer la rotation optimale
+            angle, score = compute_region_alignment(region_hes_img, region_cd30_img)
+            
             valid_regions.append({
                 'index': region_index,
                 'x': region_x,
                 'y': region_y,
                 'x_lr': region_x_lr,
                 'y_lr': region_y_lr,
-                'size_lr': region_size_lr
+                'size_lr': region_size_lr,
+                'rotation_angle': angle,
+                'alignment_score': score
             })
             region_index += 1
     
     print(f"  Trouvé {len(valid_regions)} régions valides")
+    if len(valid_regions) > 0:
+        avg_score = np.mean([r['alignment_score'] for r in valid_regions])
+        print(f"  Score moyen d'alignement: {avg_score:.3f}")
     
     # Créer les différentes versions d'images
     img_hes_original = lowres_hes_np.copy()
@@ -121,33 +190,98 @@ def process_patient(patient_id):
     img_hes_annotated = lowres_hes_np.copy()
     img_cd30_annotated = lowres_cd30_np.copy()
     
-    # Annoter les régions
-    for region in valid_regions:
-        # HES avec rectangles
+    # Générer des couleurs distinctes pour chaque région
+    np.random.seed(42)  # Pour reproductibilité
+    colors = []
+    for i in range(len(valid_regions)):
+        # Générer des couleurs vives et distinctes
+        hue = int(i * 360 / len(valid_regions))
+        color_hsv = np.uint8([[[hue, 255, 255]]])
+        color_rgb = cv2.cvtColor(color_hsv, cv2.COLOR_HSV2RGB)[0][0]
+        colors.append(tuple(int(c) for c in color_rgb))
+    
+    # Stocker les couleurs dans les régions pour la légende
+    for idx, region in enumerate(valid_regions):
+        region['color'] = colors[idx]
+    
+    # Annoter les régions avec information de rotation
+    for idx, region in enumerate(valid_regions):
+        color = colors[idx]
+        
+        # HES avec rectangles colorés
         cv2.rectangle(
             img_hes_annotated,
             (region['x_lr'], region['y_lr']),
             (region['x_lr'] + region['size_lr'], region['y_lr'] + region['size_lr']),
-            (255, 0, 0), 8
+            color, 8
         )
         
-        # CD30 avec rectangles
+        # Ajouter le numéro de région
+        region_text = f"R{idx+1}"
+        cv2.putText(
+            img_hes_annotated,
+            region_text,
+            (region['x_lr'] + 10, region['y_lr'] + 40),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.2,
+            color,
+            4
+        )
+        
+        # Ajouter l'angle de rotation
+        angle_text = f"{region['rotation_angle']:.1f}°"
+        cv2.putText(
+            img_hes_annotated,
+            angle_text,
+            (region['x_lr'] + 10, region['y_lr'] + 80),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (255, 255, 255),
+            3
+        )
+        
+        # CD30 avec rectangles pivotés de la même couleur
         region_x_cd30_lr = int(region['x'] / downsample_cd30)
         region_y_cd30_lr = int(region['y'] / downsample_cd30)
         region_size_cd30_lr = int(region_size / downsample_cd30)
         
-        cv2.rectangle(
+        # Dessiner un rectangle pivoté pour visualiser la rotation
+        center = (region_x_cd30_lr + region_size_cd30_lr // 2, 
+                 region_y_cd30_lr + region_size_cd30_lr // 2)
+        box = cv2.boxPoints(((center[0], center[1]), 
+                             (region_size_cd30_lr, region_size_cd30_lr), 
+                             region['rotation_angle']))
+        box = np.int0(box)
+        cv2.drawContours(img_cd30_annotated, [box], 0, color, 8)
+        
+        # Ajouter le numéro de région
+        cv2.putText(
             img_cd30_annotated,
-            (region_x_cd30_lr, region_y_cd30_lr),
-            (region_x_cd30_lr + region_size_cd30_lr, region_y_cd30_lr + region_size_cd30_lr),
-            (0, 0, 255), 8
+            region_text,
+            (region_x_cd30_lr + 10, region_y_cd30_lr + 40),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.2,
+            color,
+            4
+        )
+        
+        # Ajouter le score d'alignement
+        score_text = f"S:{region['alignment_score']:.2f}"
+        cv2.putText(
+            img_cd30_annotated,
+            score_text,
+            (region_x_cd30_lr + 10, region_y_cd30_lr + 80),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (255, 255, 255),
+            3
         )
     
     # Nettoyer
     slide_hes.close()
     slide_cd30.close()
     
-    return img_hes_original, img_hes_segmented, img_cd30_segmented, img_hes_annotated, img_cd30_annotated, len(valid_regions)
+    return img_hes_original, img_hes_segmented, img_cd30_segmented, img_hes_annotated, img_cd30_annotated, len(valid_regions), valid_regions
 
 
 # Traiter tous les patients
@@ -158,7 +292,7 @@ print("="*80)
 all_images = []
 for patient_id in patient_ids:
     try:
-        img_hes_orig, img_hes_seg, img_cd30_seg, img_hes_rect, img_cd30_rect, n_regions = process_patient(patient_id)
+        img_hes_orig, img_hes_seg, img_cd30_seg, img_hes_rect, img_cd30_rect, n_regions, regions = process_patient(patient_id)
         all_images.append({
             'patient_id': patient_id,
             'hes_original': img_hes_orig,
@@ -166,7 +300,8 @@ for patient_id in patient_ids:
             'cd30_segmented': img_cd30_seg,
             'hes_rectangles': img_hes_rect,
             'cd30_rectangles': img_cd30_rect,
-            'n_regions': n_regions
+            'n_regions': n_regions,
+            'regions': regions
         })
     except Exception as e:
         print(f"  ⚠ Erreur pour {patient_id}: {e}")
@@ -203,17 +338,36 @@ for idx, data in enumerate(all_images):
                            fontsize=12, fontweight='bold')
     axes[idx, 2].axis('off')
     
-    # Colonne 4: HES avec rectangles rouges
+    # Colonne 4: HES avec rectangles colorés
     axes[idx, 3].imshow(data['hes_rectangles'])
-    axes[idx, 3].set_title(f"H&E + Régions\n({data['n_regions']} rectangles rouges)", 
+    axes[idx, 3].set_title(f"H&E + Régions\n({data['n_regions']} régions)", 
                            fontsize=12, fontweight='bold')
     axes[idx, 3].axis('off')
     
-    # Colonne 5: CD30 avec rectangles bleus
+    # Colonne 5: CD30 avec rectangles colorés (mêmes couleurs)
     axes[idx, 4].imshow(data['cd30_rectangles'])
-    axes[idx, 4].set_title(f"CD30 + Régions\n({data['n_regions']} rectangles bleus)", 
+    axes[idx, 4].set_title(f"CD30 + Régions\n({data['n_regions']} régions)", 
                            fontsize=12, fontweight='bold')
     axes[idx, 4].axis('off')
+    
+    # Ajouter une légende de couleurs sous les images
+    legend_text = "Légende: "
+    for i, region in enumerate(data['regions'][:5]):  # Limiter à 5 régions pour la légende
+        color_norm = tuple(c/255.0 for c in region['color'])
+        legend_text += f"R{i+1} "
+        # Ajouter un patch de couleur
+        rect = patches.Rectangle((0.02 + i*0.18, 0.02), 0.15, 0.05, 
+                                 transform=axes[idx, 4].transAxes,
+                                 facecolor=color_norm, edgecolor='black', linewidth=2)
+        axes[idx, 4].add_patch(rect)
+        axes[idx, 4].text(0.095 + i*0.18, 0.045, f'R{i+1}', 
+                         transform=axes[idx, 4].transAxes,
+                         ha='center', va='center', fontsize=10, fontweight='bold', color='white')
+    
+    if len(data['regions']) > 5:
+        axes[idx, 4].text(0.92, 0.045, f'+{len(data["regions"])-5}', 
+                         transform=axes[idx, 4].transAxes,
+                         ha='center', va='center', fontsize=10, fontweight='bold')
 
 plt.suptitle('Pipeline complet: Segmentation et Alignement des lames H&E et CD30', 
              fontsize=18, fontweight='bold', y=0.995)

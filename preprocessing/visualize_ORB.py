@@ -456,8 +456,8 @@ print(f"\n{len(pairs)} paires disponibles")
 
 # Traiter une paire spécifique
 if pairs:
-    # Choisir le patient AHL004
-    target_patient = "AHL004"
+    # Choisir le patient AHL006
+    target_patient = "AHL006"
     
     if target_patient in pairs:
         patient_id = target_patient

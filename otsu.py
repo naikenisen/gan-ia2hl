@@ -4,6 +4,7 @@ import openslide
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
+from tqdm import tqdm
 
 folder = "/gold/data_feasibility"
 svs_files = [f for f in os.listdir(folder) if f.lower().endswith(".svs")]
@@ -26,7 +27,7 @@ rows = 3 * math.ceil(n / cols)  # 3 rows per slide
 
 plt.figure(figsize=(5 * cols, 5 * rows))
 
-for idx, filename in enumerate(svs_files):
+for idx, filename in enumerate(tqdm(svs_files, desc="Processing slides")):
     path = os.path.join(folder, filename)
     slide = openslide.OpenSlide(path)
 

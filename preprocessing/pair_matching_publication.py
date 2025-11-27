@@ -183,7 +183,7 @@ plt.suptitle('Correspondance des paires H&E / CD30 par sous-région',
 plt.tight_layout()
 
 # Sauvegarder en haute qualité
-plt.savefig(output_file, dpi=300, bbox_inches='tight', format='jpg', quality=95)
+plt.savefig(output_file, dpi=300, bbox_inches='tight', format='jpg')
 print(f"\n✓ Figure sauvegardée: {output_file}")
 print(f"  Format: JPEG haute qualité (300 DPI)")
 print(f"  Nombre total de paires: {n_total_pairs}")

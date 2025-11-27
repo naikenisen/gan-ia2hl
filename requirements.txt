@@ -10,3 +10,4 @@ Pillow
 wandb
 opencv-python
 openslide-python
+SimpleITK

@@ -7,6 +7,7 @@ import matplotlib.patches as patches
 from skimage.feature import ORB
 from skimage.measure import ransac
 from skimage.transform import AffineTransform
+import SimpleITK as sitk
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -23,6 +24,7 @@ stride_region = 12000
 lowres_level = 2
 tissue_threshold = 0.60
 
+
 def compute_tissue_mask(img_rgb):
     """Calcule un masque binaire des tissus basé sur la saturation."""
     img_np = np.array(img_rgb)
@@ -33,6 +35,74 @@ def compute_tissue_mask(img_rgb):
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
     return mask
+
+def register_images_elastix(fixed_img_np, moving_img_np):
+    """
+    Recale l'image moving sur l'image fixed avec SimpleITK Elastix.
+    
+    Args:
+        fixed_img_np: Image fixe (H&E) en numpy array RGB
+        moving_img_np: Image à recaler (CD30) en numpy array RGB
+    
+    Returns:
+        registered_img_np: Image CD30 recalée en numpy array RGB
+        transform_parameters: Paramètres de transformation Elastix
+    """
+    print("  Registration Elastix en cours...")
+    
+    # Convertir en niveaux de gris pour la registration
+    fixed_gray = cv2.cvtColor(fixed_img_np, cv2.COLOR_RGB2GRAY)
+    moving_gray = cv2.cvtColor(moving_img_np, cv2.COLOR_RGB2GRAY)
+    
+    # Convertir en images SimpleITK
+    fixed_sitk = sitk.GetImageFromArray(fixed_gray)
+    moving_sitk = sitk.GetImageFromArray(moving_gray)
+    
+    # Configuration d'Elastix pour registration affine
+    parameter_map = sitk.GetDefaultParameterMap('affine')
+    
+    # Ajuster les paramètres pour l'histopathologie
+    parameter_map['MaximumNumberOfIterations'] = ['512']
+    parameter_map['NumberOfResolutions'] = ['4']
+    parameter_map['NumberOfSpatialSamples'] = ['5000']
+    parameter_map['FinalBSplineInterpolationOrder'] = ['3']
+    
+    # Créer l'objet Elastix
+    elastix = sitk.ElastixImageFilter()
+    elastix.SetFixedImage(fixed_sitk)
+    elastix.SetMovingImage(moving_sitk)
+    elastix.SetParameterMap(parameter_map)
+    
+    # Désactiver les logs verbeux
+    elastix.LogToConsoleOff()
+    
+    # Exécuter la registration
+    elastix.Execute()
+    
+    # Récupérer les paramètres de transformation
+    transform_parameters = elastix.GetTransformParameterMap()[0]
+    
+    # Appliquer la transformation à l'image couleur
+    transformix = sitk.TransformixImageFilter()
+    transformix.SetTransformParameterMap(transform_parameters)
+    transformix.LogToConsoleOff()
+    
+    # Transformer chaque canal RGB séparément
+    registered_channels = []
+    for channel_idx in range(3):
+        channel_img = moving_img_np[:, :, channel_idx]
+        channel_sitk = sitk.GetImageFromArray(channel_img)
+        transformix.SetMovingImage(channel_sitk)
+        transformix.Execute()
+        registered_channel = sitk.GetArrayFromImage(transformix.GetResultImage())
+        registered_channels.append(registered_channel)
+    
+    # Recombiner les canaux
+    registered_img_np = np.stack(registered_channels, axis=-1).astype(np.uint8)
+    
+    print("  ✓ Registration terminée")
+    
+    return registered_img_np, transform_parameters
 
 def process_patient(patient_id):
     """Traite un patient et retourne les images annotées."""
@@ -56,6 +126,11 @@ def process_patient(patient_id):
     
     lowres_hes_np = np.array(lowres_hes)
     lowres_cd30_np = np.array(lowres_cd30)
+    
+    # ÉTAPE DE REGISTRATION: Recaler CD30 sur H&E avec Elastix
+    print("  Démarrage de la registration Elastix...")
+    lowres_cd30_registered, transform_params = register_images_elastix(lowres_hes_np, lowres_cd30_np)
+    print("  CD30 recalé sur H&E")
     
     # Calculer le masque de tissu
     mask_hes = compute_tissue_mask(lowres_hes)
@@ -104,7 +179,7 @@ def process_patient(patient_id):
     
     # Créer les images annotées
     img_hes_annotated = lowres_hes_np.copy()
-    img_cd30_annotated = lowres_cd30_np.copy()
+    img_cd30_annotated = lowres_cd30_registered.copy()  # Utiliser l'image recalée
     
     # Annoter les régions
     for region in valid_regions:

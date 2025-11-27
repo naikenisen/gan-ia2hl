@@ -49,7 +49,8 @@ def create_overlay(hes_img, cd30_img, alpha=0.5):
 
 def register_images_elastix(fixed_img_np, moving_img_np):
     """
-    Recale l'image moving sur l'image fixed avec SimpleITK Elastix.
+    Recale l'image moving sur l'image fixed avec SimpleITK.
+    Utilise ImageRegistrationMethod avec transformation affine.
     
     Args:
         fixed_img_np: Image fixe (H&E) en numpy array RGB
@@ -57,71 +58,75 @@ def register_images_elastix(fixed_img_np, moving_img_np):
     
     Returns:
         registered_img_np: Image CD30 recalée en numpy array RGB
-        transform_parameters: Paramètres de transformation Elastix
+        transform: Transformation appliquée
     """
-    print("  Registration Elastix en cours...")
+    print("  Registration SimpleITK en cours...")
     
     # Convertir en niveaux de gris pour la registration
-    fixed_gray = cv2.cvtColor(fixed_img_np, cv2.COLOR_RGB2GRAY)
-    moving_gray = cv2.cvtColor(moving_img_np, cv2.COLOR_RGB2GRAY)
+    fixed_gray = cv2.cvtColor(fixed_img_np, cv2.COLOR_RGB2GRAY).astype(np.float32)
+    moving_gray = cv2.cvtColor(moving_img_np, cv2.COLOR_RGB2GRAY).astype(np.float32)
     
     # Convertir en images SimpleITK
     fixed_sitk = sitk.GetImageFromArray(fixed_gray)
     moving_sitk = sitk.GetImageFromArray(moving_gray)
     
-    # Créer le parameter map pour registration affine avec VectorOfParameterMap
-    parameter_map = sitk.VectorOfParameterMap()
+    # Initialiser la transformation affine
+    initial_transform = sitk.CenteredTransformInitializer(
+        fixed_sitk,
+        moving_sitk,
+        sitk.AffineTransform(2),
+        sitk.CenteredTransformInitializerFilter.GEOMETRY
+    )
     
-    # Paramètres de registration affine
-    affine_params = {
-        'Registration': ['MultiResolutionRegistration'],
-        'Transform': ['AffineTransform'],
-        'Metric': ['AdvancedMattesMutualInformation'],
-        'Optimizer': ['AdaptiveStochasticGradientDescent'],
-        'ResampleInterpolator': ['FinalBSplineInterpolator'],
-        'Resampler': ['DefaultResampler'],
-        'FixedImagePyramid': ['FixedSmoothingImagePyramid'],
-        'MovingImagePyramid': ['MovingSmoothingImagePyramid'],
-        'NumberOfResolutions': ['4'],
-        'MaximumNumberOfIterations': ['512'],
-        'NumberOfSpatialSamples': ['5000'],
-        'NewSamplesEveryIteration': ['true'],
-        'ImageSampler': ['Random'],
-        'BSplineInterpolationOrder': ['1'],
-        'FinalBSplineInterpolationOrder': ['3'],
-        'DefaultPixelValue': ['0'],
-        'WriteResultImage': ['false']
-    }
-    parameter_map.append(affine_params)
+    # Configurer la méthode de registration
+    registration_method = sitk.ImageRegistrationMethod()
     
-    # Créer l'objet Elastix
-    elastix = sitk.ElastixImageFilter()
-    elastix.SetFixedImage(fixed_sitk)
-    elastix.SetMovingImage(moving_sitk)
-    elastix.SetParameterMap(parameter_map)
+    # Métrique de similarité (Mutual Information pour images multimodales)
+    registration_method.SetMetricAsMattesMutualInformation(numberOfHistogramBins=50)
+    registration_method.SetMetricSamplingStrategy(registration_method.RANDOM)
+    registration_method.SetMetricSamplingPercentage(0.1)
     
-    # Désactiver les logs verbeux
-    elastix.LogToConsoleOff()
+    # Interpolateur
+    registration_method.SetInterpolator(sitk.sitkLinear)
+    
+    # Optimiseur
+    registration_method.SetOptimizerAsGradientDescent(
+        learningRate=1.0,
+        numberOfIterations=200,
+        convergenceMinimumValue=1e-6,
+        convergenceWindowSize=10
+    )
+    registration_method.SetOptimizerScalesFromPhysicalShift()
+    
+    # Multi-résolution
+    registration_method.SetShrinkFactorsPerLevel(shrinkFactors=[4, 2, 1])
+    registration_method.SetSmoothingSigmasPerLevel(smoothingSigmas=[2, 1, 0])
+    registration_method.SmoothingSigmasAreSpecifiedInPhysicalUnitsOn()
+    
+    # Transformation initiale
+    registration_method.SetInitialTransform(initial_transform, inPlace=False)
     
     # Exécuter la registration
-    elastix.Execute()
+    final_transform = registration_method.Execute(fixed_sitk, moving_sitk)
     
-    # Récupérer les paramètres de transformation
-    transform_parameters = elastix.GetTransformParameterMap()[0]
+    print(f"    Optimiseur: {registration_method.GetOptimizerStopConditionDescription()}")
     
-    # Appliquer la transformation à l'image couleur
-    transformix = sitk.TransformixImageFilter()
-    transformix.SetTransformParameterMap(transform_parameters)
-    transformix.LogToConsoleOff()
-    
-    # Transformer chaque canal RGB séparément
+    # Appliquer la transformation à chaque canal RGB
     registered_channels = []
     for channel_idx in range(3):
-        channel_img = moving_img_np[:, :, channel_idx]
+        channel_img = moving_img_np[:, :, channel_idx].astype(np.float32)
         channel_sitk = sitk.GetImageFromArray(channel_img)
-        transformix.SetMovingImage(channel_sitk)
-        transformix.Execute()
-        registered_channel = sitk.GetArrayFromImage(transformix.GetResultImage())
+        
+        resampled = sitk.Resample(
+            channel_sitk,
+            fixed_sitk,
+            final_transform,
+            sitk.sitkLinear,
+            0.0,
+            channel_sitk.GetPixelID()
+        )
+        
+        registered_channel = sitk.GetArrayFromImage(resampled)
         registered_channels.append(registered_channel)
     
     # Recombiner les canaux
@@ -129,7 +134,7 @@ def register_images_elastix(fixed_img_np, moving_img_np):
     
     print("  ✓ Registration terminée")
     
-    return registered_img_np, transform_parameters
+    return registered_img_np, final_transform
 
 def process_patient(patient_id):
     """Traite un patient et retourne les images annotées."""
@@ -272,7 +277,16 @@ for patient_id in patient_ids:
         })
     except Exception as e:
         print(f"  ⚠ Erreur pour {patient_id}: {e}")
+        import traceback
+        traceback.print_exc()
         continue
+
+# Vérifier qu'au moins un patient a été traité avec succès
+if len(all_images) == 0:
+    print("\n" + "="*80)
+    print("ERREUR: Aucun patient n'a pu être traité avec succès!")
+    print("="*80)
+    exit(1)
 
 # Créer la grande figure - 5 colonnes pour comparaison complète
 print("\n" + "="*80)

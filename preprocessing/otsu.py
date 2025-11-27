@@ -7,7 +7,60 @@ import cv2
 from tqdm import tqdm
 
 folder = "/gold/data_feasibility"
-svs_files = [f for f in os.listdir(folder) if f.lower().endswith(".svs")]
+all_svs_files = [f for f in os.listdir(folder) if f.lower().endswith(".svs")]
+
+# ============================================================================
+# CONFIGURATION : Choisissez les lames à visualiser
+# ============================================================================
+# Option 1: Laisser vide pour traiter TOUTES les lames
+# svs_files = all_svs_files
+
+# Option 2: Spécifier les noms de fichiers (avec ou sans extension)
+svs_files = [
+    "AHL004_HES.svs",
+    "AHL004_CD30.svs",
+    "AHL006_HES.svs",
+    "AHL006_CD30.svs"
+]
+
+# Option 3: Filtrer par type (HES ou CD30)
+# svs_files = [f for f in all_svs_files if "_HES" in f]
+# svs_files = [f for f in all_svs_files if "_CD30" in f]
+
+# Option 4: Sélectionner les N premières lames
+# svs_files = all_svs_files[:5]
+
+# Si aucune sélection spécifique, afficher la liste disponible
+if not svs_files:
+    print("\n" + "="*80)
+    print("LAMES DISPONIBLES:")
+    print("="*80)
+    for i, f in enumerate(all_svs_files, 1):
+        print(f"{i:2d}. {f}")
+    print("\n⚠️  Aucune lame sélectionnée!")
+    print("Modifiez la variable 'svs_files' dans le code pour choisir vos lames.")
+    print("="*80 + "\n")
+    exit()
+
+# Vérifier que les fichiers sélectionnés existent
+svs_files_valid = []
+for f in svs_files:
+    # Ajouter .svs si pas présent
+    if not f.endswith('.svs'):
+        f = f + '.svs'
+    
+    if f in all_svs_files:
+        svs_files_valid.append(f)
+    else:
+        print(f"⚠️  Fichier non trouvé: {f}")
+
+svs_files = svs_files_valid
+
+if not svs_files:
+    print("\n✗ Aucune lame valide à traiter!")
+    exit()
+
+print(f"\n✓ {len(svs_files)} lame(s) sélectionnée(s) pour visualisation\n")
 
 level = 2
 

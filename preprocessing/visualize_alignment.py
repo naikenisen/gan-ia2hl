@@ -12,7 +12,7 @@ warnings.filterwarnings('ignore')
 
 # Configuration
 input_folder = "/gold/data_feasibility"
-output_file = "/home/naiken/coding/ia2hl/preprocessing/alignment_overview.jpg"
+output_file = "alignment_overview.jpg"
 
 # Liste des patients à traiter
 patient_ids = ["AHL001", "AHL002", "AHL004", "AHL006", "AHL011"]

@@ -36,6 +36,17 @@ def compute_tissue_mask(img_rgb):
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
     return mask
 
+def apply_otsu_segmentation(img_rgb):
+    """
+    Applique la segmentation Otsu pour extraire uniquement les tissus.
+    Les zones non-tissulaires sont mises en blanc.
+    """
+    mask = compute_tissue_mask(img_rgb)
+    img_np = np.array(img_rgb)
+    img_segmented = img_np.copy()
+    img_segmented[mask == 0] = 255  # Mettre le background en blanc
+    return img_segmented, mask
+
 def create_overlay(hes_img, cd30_img, alpha=0.6):
     """
     Crée une image overlay pour visualiser l'alignement.
@@ -103,20 +114,22 @@ def create_difference_map(hes_img, cd30_img):
     
     return diff_colored
 
-def register_images_elastix(fixed_img_np, moving_img_np):
+def register_images_elastix(fixed_img_np, moving_img_np, fixed_mask=None, moving_mask=None):
     """
     Recale l'image moving sur l'image fixed avec SimpleITK.
     Utilise ImageRegistrationMethod avec transformation affine.
     
     Args:
-        fixed_img_np: Image fixe (H&E) en numpy array RGB
-        moving_img_np: Image à recaler (CD30) en numpy array RGB
+        fixed_img_np: Image fixe (H&E segmentée) en numpy array RGB
+        moving_img_np: Image à recaler (CD30 segmentée) en numpy array RGB
+        fixed_mask: Masque optionnel pour l'image fixe
+        moving_mask: Masque optionnel pour l'image moving
     
     Returns:
         registered_img_np: Image CD30 recalée en numpy array RGB
         transform: Transformation appliquée
     """
-    print("  Registration SimpleITK en cours...")
+    print("  Registration SimpleITK en cours (sur images segmentées)...")
     
     # Convertir en niveaux de gris pour la registration
     fixed_gray = cv2.cvtColor(fixed_img_np, cv2.COLOR_RGB2GRAY).astype(np.float32)
@@ -215,13 +228,21 @@ def process_patient(patient_id):
     lowres_hes_np = np.array(lowres_hes)
     lowres_cd30_np = np.array(lowres_cd30)
     
-    # ÉTAPE DE REGISTRATION: Recaler CD30 sur H&E avec Elastix
-    print("  Démarrage de la registration Elastix...")
-    lowres_cd30_registered, transform_params = register_images_elastix(lowres_hes_np, lowres_cd30_np)
-    print("  CD30 recalé sur H&E")
+    # ÉTAPE 1: Segmentation Otsu sur les deux images
+    print("  Application de la segmentation Otsu...")
+    lowres_hes_segmented, mask_hes = apply_otsu_segmentation(lowres_hes_np)
+    lowres_cd30_segmented, mask_cd30 = apply_otsu_segmentation(lowres_cd30_np)
+    print("  ✓ Segmentation terminée")
     
-    # Calculer le masque de tissu
-    mask_hes = compute_tissue_mask(lowres_hes)
+    # ÉTAPE 2: Registration sur les images segmentées
+    print("  Démarrage de la registration Elastix sur images segmentées...")
+    lowres_cd30_registered, transform_params = register_images_elastix(
+        lowres_hes_segmented, 
+        lowres_cd30_segmented,
+        mask_hes,
+        mask_cd30
+    )
+    print("  ✓ CD30 segmenté recalé sur H&E segmenté")
     
     # Dimensions
     w0_hes, h0_hes = slide_hes.level_dimensions[0]
@@ -265,26 +286,26 @@ def process_patient(patient_id):
     
     print(f"  Trouvé {len(valid_regions)} régions valides")
     
-    # Créer des visualisations pour mettre en évidence la registration
+    # Créer des visualisations pour mettre en évidence la registration (sur images segmentées)
     # 1. Overlays colorés (Magenta/Vert)
-    overlay_no_reg = create_overlay(lowres_hes_np, lowres_cd30_np)
-    overlay_registered = create_overlay(lowres_hes_np, lowres_cd30_registered)
+    overlay_no_reg = create_overlay(lowres_hes_segmented, lowres_cd30_segmented)
+    overlay_registered = create_overlay(lowres_hes_segmented, lowres_cd30_registered)
     
     # 2. Damiers (Checkerboard)
-    checkerboard_no_reg = create_checkerboard(lowres_hes_np, lowres_cd30_np, square_size=300)
-    checkerboard_registered = create_checkerboard(lowres_hes_np, lowres_cd30_registered, square_size=300)
+    checkerboard_no_reg = create_checkerboard(lowres_hes_segmented, lowres_cd30_segmented, square_size=300)
+    checkerboard_registered = create_checkerboard(lowres_hes_segmented, lowres_cd30_registered, square_size=300)
     
     # 3. Cartes de différence (heatmaps)
-    diff_map_no_reg = create_difference_map(lowres_hes_np, lowres_cd30_np)
-    diff_map_registered = create_difference_map(lowres_hes_np, lowres_cd30_registered)
+    diff_map_no_reg = create_difference_map(lowres_hes_segmented, lowres_cd30_segmented)
+    diff_map_registered = create_difference_map(lowres_hes_segmented, lowres_cd30_registered)
     
     # Nettoyer
     slide_hes.close()
     slide_cd30.close()
     
     return {
-        'hes': lowres_hes_np,
-        'cd30_no_reg': lowres_cd30_np,
+        'hes': lowres_hes_segmented,
+        'cd30_no_reg': lowres_cd30_segmented,
         'cd30_registered': lowres_cd30_registered,
         'overlay_no_reg': overlay_no_reg,
         'overlay_registered': overlay_registered,
@@ -331,17 +352,17 @@ fig, axes = plt.subplots(3, 3, figsize=(20, 18))
 for idx, data in enumerate(all_images):
     patient_id = data['patient_id']
     
-    # RANGÉE 1: Images sources
+    # RANGÉE 1: Images sources segmentées
     axes[0, 0].imshow(data['hes'])
-    axes[0, 0].set_title(f"{patient_id} - H&E (Reference)", fontsize=14, fontweight='bold')
+    axes[0, 0].set_title(f"{patient_id} - H&E Segmented (Reference)", fontsize=14, fontweight='bold')
     axes[0, 0].axis('off')
     
     axes[0, 1].imshow(data['cd30_no_reg'])
-    axes[0, 1].set_title("CD30 (Unregistered)", fontsize=14, fontweight='bold')
+    axes[0, 1].set_title("CD30 Segmented (Unregistered)", fontsize=14, fontweight='bold')
     axes[0, 1].axis('off')
     
     axes[0, 2].imshow(data['cd30_registered'])
-    axes[0, 2].set_title("CD30 (Registered)", fontsize=14, fontweight='bold', color='green')
+    axes[0, 2].set_title("CD30 Segmented (Registered)", fontsize=14, fontweight='bold', color='green')
     axes[0, 2].axis('off')
     
     # RANGÉE 2: Overlays colorés (mise en évidence de l'alignement)
@@ -372,7 +393,7 @@ for idx, data in enumerate(all_images):
     axes[2, 2].set_title("Difference Map\n(Blue=Good, Red=Poor)", fontsize=12, fontweight='bold')
     axes[2, 2].axis('off')
 
-plt.suptitle('Multi-Modal Image Registration: H&E to CD30 Alignment\nAffine Transformation via Mattes Mutual Information', 
+plt.suptitle('Multi-Modal Image Registration on Otsu-Segmented Images\nH&E to CD30 Alignment via Affine Transformation (Mattes Mutual Information)', 
              fontsize=16, fontweight='bold', y=0.995)
 plt.tight_layout()
 
@@ -382,10 +403,10 @@ print(f"\n✓ Figure sauvegardée: {output_file}")
 print(f"  Format: JPEG haute qualité (300 DPI)")
 print(f"  Patients inclus: {', '.join([d['patient_id'] for d in all_images])}")
 print("\n" + "="*80)
-print("STRUCTURE DE LA FIGURE (3×3 grid)")
+print("STRUCTURE DE LA FIGURE (3×3 grid) - IMAGES SEGMENTÉES PAR OTSU")
 print("="*80)
-print("  RANGÉE 1: Images sources")
-print("    - H&E référence | CD30 brut | CD30 recalé")
+print("  RANGÉE 1: Images sources segmentées")
+print("    - H&E segmenté (référence) | CD30 segmenté brut | CD30 segmenté recalé")
 print("")
 print("  RANGÉE 2: Overlays colorés (IMPACT VISUEL MAXIMAL)")
 print("    - Avant registration | Après registration | Légende")
@@ -394,4 +415,4 @@ print("")
 print("  RANGÉE 3: Visualisations techniques")
 print("    - Damier avant | Damier après | Carte de différence")
 print("="*80)
-print("\n✓ Visualisation terminée!")
+print("\n✓ Registration et visualisation sur images segmentées terminées!")

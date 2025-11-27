@@ -56,6 +56,7 @@ def register_images_elastix(fixed_img_np, moving_img_np):
     """
     Recale l'image moving sur l'image fixed avec SimpleITK.
     Utilise ImageRegistrationMethod avec transformation affine.
+    La registration se fait sur les images segmentées par Otsu.
     
     Args:
         fixed_img_np: Image fixe (H&E) en numpy array RGB
@@ -67,9 +68,19 @@ def register_images_elastix(fixed_img_np, moving_img_np):
     """
     print("  Registration SimpleITK en cours...")
     
-    # Convertir en niveaux de gris pour la registration
-    fixed_gray = cv2.cvtColor(fixed_img_np, cv2.COLOR_RGB2GRAY).astype(np.float32)
-    moving_gray = cv2.cvtColor(moving_img_np, cv2.COLOR_RGB2GRAY).astype(np.float32)
+    # Appliquer la segmentation Otsu sur les deux images
+    fixed_mask = compute_tissue_mask(fixed_img_np)
+    moving_mask = compute_tissue_mask(moving_img_np)
+    
+    # Appliquer les masques pour ne garder que les tissus
+    fixed_segmented = fixed_img_np.copy()
+    moving_segmented = moving_img_np.copy()
+    fixed_segmented[fixed_mask == 0] = 255
+    moving_segmented[moving_mask == 0] = 255
+    
+    # Convertir en niveaux de gris pour la registration (sur les images segmentées)
+    fixed_gray = cv2.cvtColor(fixed_segmented, cv2.COLOR_RGB2GRAY).astype(np.float32)
+    moving_gray = cv2.cvtColor(moving_segmented, cv2.COLOR_RGB2GRAY).astype(np.float32)
     
     # Convertir en images SimpleITK
     fixed_sitk = sitk.GetImageFromArray(fixed_gray)
@@ -214,14 +225,24 @@ def process_patient(patient_id):
     
     print(f"  Trouvé {len(valid_regions)} régions valides")
     
-    # Créer les images annotées (AVEC et SANS registration)
-    img_hes_annotated = lowres_hes_np.copy()
-    img_cd30_no_reg_annotated = lowres_cd30_np.copy()  # SANS registration
-    img_cd30_registered_annotated = lowres_cd30_registered.copy()  # AVEC registration
+    # Segmenter les images avec Otsu pour l'affichage final
+    mask_hes_display = compute_tissue_mask(lowres_hes_np)
+    mask_cd30_registered = compute_tissue_mask(lowres_cd30_registered)
+    
+    # Créer les images segmentées
+    img_hes_segmented = lowres_hes_np.copy()
+    img_hes_segmented[mask_hes_display == 0] = 255
+    
+    img_cd30_segmented = lowres_cd30_registered.copy()
+    img_cd30_segmented[mask_cd30_registered == 0] = 255
+    
+    # Créer les images annotées (seulement 2: HES et CD30 registered)
+    img_hes_annotated = img_hes_segmented.copy()
+    img_cd30_registered_annotated = img_cd30_segmented.copy()
     
     # Annoter les régions
     for region in valid_regions:
-        # HES
+        # HES avec régions
         cv2.rectangle(
             img_hes_annotated,
             (region['x_lr'], region['y_lr']),
@@ -229,37 +250,23 @@ def process_patient(patient_id):
             (255, 0, 0), 8
         )
         
-        # CD30 - Annoter les deux versions
+        # CD30 registered avec régions
         region_x_cd30_lr = int(region['x'] / downsample_cd30)
         region_y_cd30_lr = int(region['y'] / downsample_cd30)
         region_size_cd30_lr = int(region_size / downsample_cd30)
         
-        # CD30 SANS registration
-        cv2.rectangle(
-            img_cd30_no_reg_annotated,
-            (region_x_cd30_lr, region_y_cd30_lr),
-            (region_x_cd30_lr + region_size_cd30_lr, region_y_cd30_lr + region_size_cd30_lr),
-            (0, 0, 255), 8
-        )
-        
-        # CD30 AVEC registration
         cv2.rectangle(
             img_cd30_registered_annotated,
             (region_x_cd30_lr, region_y_cd30_lr),
             (region_x_cd30_lr + region_size_cd30_lr, region_y_cd30_lr + region_size_cd30_lr),
-            (0, 255, 0), 8  # Vert pour différencier
+            (0, 255, 0), 8
         )
-    
-    # Créer des overlays pour visualiser l'amélioration
-    overlay_no_reg = create_overlay(lowres_hes_np, lowres_cd30_np)
-    overlay_registered = create_overlay(lowres_hes_np, lowres_cd30_registered)
     
     # Nettoyer
     slide_hes.close()
     slide_cd30.close()
     
-    return (img_hes_annotated, img_cd30_no_reg_annotated, img_cd30_registered_annotated, 
-            overlay_no_reg, overlay_registered, len(valid_regions))
+    return (img_hes_annotated, img_cd30_registered_annotated, len(valid_regions))
 
 
 # Traiter tous les patients
@@ -270,14 +277,11 @@ print("="*80)
 all_images = []
 for patient_id in patient_ids:
     try:
-        img_hes, img_cd30_no_reg, img_cd30_reg, overlay_no_reg, overlay_reg, n_regions = process_patient(patient_id)
+        img_hes, img_cd30_reg, n_regions = process_patient(patient_id)
         all_images.append({
             'patient_id': patient_id,
             'hes': img_hes,
-            'cd30_no_reg': img_cd30_no_reg,
             'cd30_registered': img_cd30_reg,
-            'overlay_no_reg': overlay_no_reg,
-            'overlay_registered': overlay_reg,
             'n_regions': n_regions
         })
     except Exception as e:
@@ -293,50 +297,32 @@ if len(all_images) == 0:
     print("="*80)
     exit(1)
 
-# Créer la grande figure - 5 colonnes pour comparaison complète
+# Créer la grande figure - 2 colonnes seulement
 print("\n" + "="*80)
 print("CRÉATION DE LA FIGURE FINALE")
 print("="*80)
 
 n_patients = len(all_images)
-fig, axes = plt.subplots(n_patients, 5, figsize=(30, 5*n_patients))
+fig, axes = plt.subplots(n_patients, 2, figsize=(16, 8*n_patients))
 
 # S'assurer que axes est un tableau 2D même avec un seul patient
 if n_patients == 1:
     axes = axes.reshape(1, -1)
 
 for idx, data in enumerate(all_images):
-    # Colonne 1: H&E
+    # Colonne 1: H&E segmenté + régions
     axes[idx, 0].imshow(data['hes'])
-    axes[idx, 0].set_title(f"{data['patient_id']} - H&E\n{data['n_regions']} régions", 
-                           fontsize=12, fontweight='bold')
+    axes[idx, 0].set_title(f"{data['patient_id']} - H&E segmenté (Otsu)\n{data['n_regions']} régions (boîtes rouges)", 
+                           fontsize=14, fontweight='bold')
     axes[idx, 0].axis('off')
     
-    # Colonne 2: CD30 SANS registration (rouge)
-    axes[idx, 1].imshow(data['cd30_no_reg'])
-    axes[idx, 1].set_title(f"CD30 SANS registration\nBoîtes rouges", 
-                           fontsize=12, fontweight='bold', color='red')
+    # Colonne 2: CD30 segmenté + registration + régions
+    axes[idx, 1].imshow(data['cd30_registered'])
+    axes[idx, 1].set_title(f"CD30 segmenté (Otsu) + Registration\n{data['n_regions']} régions (boîtes vertes)", 
+                           fontsize=14, fontweight='bold', color='green')
     axes[idx, 1].axis('off')
-    
-    # Colonne 3: Overlay SANS registration
-    axes[idx, 2].imshow(data['overlay_no_reg'])
-    axes[idx, 2].set_title(f"Overlay SANS registration\n(H&E=rouge, CD30=cyan)", 
-                           fontsize=12, fontweight='bold', color='orange')
-    axes[idx, 2].axis('off')
-    
-    # Colonne 4: CD30 AVEC registration (vert)
-    axes[idx, 3].imshow(data['cd30_registered'])
-    axes[idx, 3].set_title(f"CD30 AVEC registration Elastix\nBoîtes vertes", 
-                           fontsize=12, fontweight='bold', color='green')
-    axes[idx, 3].axis('off')
-    
-    # Colonne 5: Overlay AVEC registration
-    axes[idx, 4].imshow(data['overlay_registered'])
-    axes[idx, 4].set_title(f"Overlay AVEC registration\n(H&E=rouge, CD30=cyan)", 
-                           fontsize=12, fontweight='bold', color='darkgreen')
-    axes[idx, 4].axis('off')
 
-plt.suptitle('Comparaison: Alignement SANS vs AVEC Registration Elastix\nLes overlays montrent la qualité de l\'alignement', 
+plt.suptitle('Images segmentées par Otsu - Registration CD30 → H&E', 
              fontsize=18, fontweight='bold', y=0.998)
 plt.tight_layout()
 
@@ -347,14 +333,10 @@ print(f"  Format: JPEG haute qualité (300 DPI)")
 print(f"  Patients inclus: {', '.join([d['patient_id'] for d in all_images])}")
 print(f"  Total régions: {sum([d['n_regions'] for d in all_images])}")
 print("\n" + "="*80)
-print("STRUCTURE DE LA FIGURE (5 colonnes)")
+print("STRUCTURE DE LA FIGURE (2 colonnes)")
 print("="*80)
-print("  Colonne 1: H&E - Image de référence avec boîtes bleues")
-print("  Colonne 2: CD30 SANS registration - Boîtes ROUGES (alignement initial)")
-print("  Colonne 3: OVERLAY SANS registration - Visualisation de l'alignement initial")
-print("              (H&E=rouge, CD30=cyan, si bien aligné → blanc)")
-print("  Colonne 4: CD30 AVEC registration Elastix - Boîtes VERTES (alignement amélioré)")
-print("  Colonne 5: OVERLAY AVEC registration - Visualisation de l'alignement final")
-print("              (H&E=rouge, CD30=cyan, si bien aligné → blanc)")
+print("  Colonne 1: H&E segmenté (Otsu) avec régions (boîtes rouges)")
+print("  Colonne 2: CD30 segmenté (Otsu) + Registration avec régions (boîtes vertes)")
+print("  Note: La registration se fait sur les images segmentées par Otsu")
 print("="*80)
 print("\n✓ Visualisation terminée!")

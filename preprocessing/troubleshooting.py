@@ -297,6 +297,81 @@ def apply_spatial_coherence_correction(regions_info, patient_id):
     return regions_info
 
 
+def generate_regions_triptych_figure(patient_id, regions_data):
+    """
+    Génère une grande figure avec toutes les sous-régions en triptyque :
+    HES | CD30 originale | CD30 alignée
+    """
+    num_regions = len(regions_data)
+    if num_regions == 0:
+        return None
+    
+    # Calculer la disposition de la grille (3 colonnes par région)
+    ncols = 3  # HES, CD30 originale, CD30 alignée
+    nrows = num_regions
+    
+    # Créer une grande figure
+    fig, axes = plt.subplots(nrows, ncols, figsize=(15, 5 * num_regions))
+    
+    # Si une seule région, axes n'est pas un array 2D
+    if num_regions == 1:
+        axes = axes.reshape(1, -1)
+    
+    for idx, region_data in enumerate(regions_data):
+        region_idx = region_data['idx']
+        img_hes = region_data['img_hes']
+        img_cd30_original = region_data['img_cd30_original']
+        img_cd30_aligned = region_data['img_cd30_aligned']
+        metrics = region_data['metrics']
+        
+        # Colonne 1 : HES
+        axes[idx, 0].imshow(img_hes)
+        axes[idx, 0].set_title(f'Région {region_idx} - HES (référence)', 
+                               fontsize=12, fontweight='bold')
+        axes[idx, 0].axis('off')
+        
+        # Colonne 2 : CD30 originale
+        axes[idx, 1].imshow(img_cd30_original)
+        axes[idx, 1].set_title(f'CD30 (originale)', 
+                               fontsize=12, fontweight='bold')
+        axes[idx, 1].axis('off')
+        
+        # Colonne 3 : CD30 alignée
+        axes[idx, 2].imshow(img_cd30_aligned)
+        
+        # Titre selon le statut
+        if metrics['status'] == 'success':
+            title = f'CD30 (alignée)\n{metrics["inliers"]} inliers, ratio: {metrics["ratio"]:.3f}'
+            color = 'green'
+        elif metrics['status'] == 'interpolated':
+            title = f'CD30 (alignée par interpolation)'
+            color = 'orange'
+        else:
+            title = f'CD30 (échec)\nTransformation globale uniquement'
+            color = 'red'
+        
+        axes[idx, 2].set_title(title, fontsize=12, fontweight='bold', color=color)
+        axes[idx, 2].axis('off')
+    
+    plt.suptitle(f'Patient {patient_id} - Toutes les régions en triptyque', 
+                fontsize=16, fontweight='bold', y=0.995)
+    plt.tight_layout()
+    
+    # Sauvegarder
+    output_path = os.path.join(output_folder, f'{patient_id}_regions_triptych.png')
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    print(f"✓ Triptyque des régions sauvegardé: {output_path}")
+    
+    # Logger dans wandb
+    wandb.log({
+        f"{patient_id}/triptych": wandb.Image(output_path)
+    })
+    
+    return output_path
+
+
 def generate_patient_overview_figure(lowres_hes_np, patient_id, regions_info):
     """
     Génère une figure unique par patient montrant toutes les régions sur la lame HES
@@ -605,7 +680,7 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
             
             tissue_percent = np.mean(region_mask > 0)
             
-            if region_mask.size == 0 or tissue_percent < 0.60:
+            if region_mask.size == 0 or tissue_percent < 0.20:
                 continue
             
             print(f"\n✓ Région {region_idx} trouvée à x={region_x}, y={region_y}")
@@ -645,7 +720,9 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
                 'x_lr': region_x_lr,
                 'y_lr': region_y_lr,
                 'size_lr': region_size_lr,
-                'metrics': metrics
+                'metrics': metrics,
+                'img_hes': region_hes_lr.copy(),
+                'img_cd30_original': region_cd30_lr.copy()
             })
             
             if metrics['status'] == 'success':
@@ -667,10 +744,48 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
         # Recompter les régions traitées après correction
         regions_processed = sum(1 for r in regions_info if r['metrics']['status'] in ['success', 'interpolated'])
     
+    # Générer les images CD30 alignées pour chaque région
+    if regions_info:
+        print(f"\n[ALIGNEMENT] Génération des images alignées pour {patient_id}...")
+        regions_data = []
+        
+        for region_info in regions_info:
+            img_hes = region_info['img_hes']
+            img_cd30_original = region_info['img_cd30_original']
+            transform = region_info['metrics']['transform']
+            
+            # Appliquer la transformation si elle existe
+            if transform is not None:
+                h, w = img_hes.shape[:2]
+                img_cd30_aligned = cv2.warpAffine(
+                    img_cd30_original,
+                    transform.params[:2],
+                    (w, h),
+                    flags=cv2.INTER_LINEAR,
+                    borderMode=cv2.BORDER_CONSTANT,
+                    borderValue=(255, 255, 255)
+                )
+            else:
+                # Si pas de transformation, utiliser l'image originale
+                img_cd30_aligned = img_cd30_original.copy()
+            
+            regions_data.append({
+                'idx': region_info['idx'],
+                'img_hes': img_hes,
+                'img_cd30_original': img_cd30_original,
+                'img_cd30_aligned': img_cd30_aligned,
+                'metrics': region_info['metrics']
+            })
+    
     # Générer la figure de vue d'ensemble
     if regions_info:
         print(f"\n[VISUALISATION] Génération de la vue d'ensemble pour {patient_id}...")
         generate_patient_overview_figure(lowres_hes_np, patient_id, regions_info)
+    
+    # Générer la figure triptyque de toutes les régions
+    if regions_data:
+        print(f"\n[VISUALISATION] Génération du triptyque des régions pour {patient_id}...")
+        generate_regions_triptych_figure(patient_id, regions_data)
     
     # Logger le résumé du patient
     wandb.log({

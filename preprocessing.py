@@ -14,12 +14,12 @@ warnings.filterwarnings('ignore')
 # Configuration
 input_folder = "/gold/data_feasibility"
 output_folder = "/silver/ube/extract"
-patch_size = 3000
-region_size = 15000  # Taille des sous-régions (pour lames ~80000x70000)
-stride_region = 15000  # Stride entre sous-régions (non-overlap si = region_size)
+patch_size = 2000
+region_size = 12000  # Taille des sous-régions (pour lames ~80000x70000)
+stride_region = 12000  # Stride entre sous-régions (non-overlap si = region_size)
 lowres_level = 2
-tissue_threshold = 0.80
-jpeg_quality = 90  # Qualité JPEG pour compression
+tissue_threshold = 0.60
+jpeg_quality = 100  # Qualité JPEG pour compression
 
 hes_dir = os.path.join(output_folder, "HES")
 cd30_dir = os.path.join(output_folder, "CD30")

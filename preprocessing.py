@@ -40,7 +40,6 @@ wandb.init(
     }
 )
 
-
 def compute_tissue_mask(img_rgb):
     """Calcule un masque binaire des tissus basé sur la saturation."""
     img_np = np.array(img_rgb)

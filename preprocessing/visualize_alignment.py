@@ -36,6 +36,17 @@ def compute_tissue_mask(img_rgb):
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
     return mask
 
+def create_overlay(hes_img, cd30_img, alpha=0.5):
+    """
+    Crée une image overlay pour visualiser l'alignement.
+    H&E en rouge, CD30 en cyan.
+    """
+    overlay = np.zeros_like(hes_img)
+    overlay[:, :, 0] = (hes_img[:, :, 0] * alpha).astype(np.uint8)  # Rouge pour H&E
+    overlay[:, :, 1] = (cd30_img[:, :, 1] * alpha).astype(np.uint8)  # Cyan pour CD30
+    overlay[:, :, 2] = (cd30_img[:, :, 2] * alpha).astype(np.uint8)
+    return overlay
+
 def register_images_elastix(fixed_img_np, moving_img_np):
     """
     Recale l'image moving sur l'image fixed avec SimpleITK Elastix.
@@ -58,14 +69,25 @@ def register_images_elastix(fixed_img_np, moving_img_np):
     fixed_sitk = sitk.GetImageFromArray(fixed_gray)
     moving_sitk = sitk.GetImageFromArray(moving_gray)
     
-    # Configuration d'Elastix pour registration affine
-    parameter_map = sitk.GetDefaultParameterMap('affine')
-    
-    # Ajuster les paramètres pour l'histopathologie
-    parameter_map['MaximumNumberOfIterations'] = ['512']
+    # Créer manuellement le parameter map pour registration affine
+    parameter_map = sitk.ParameterMap()
+    parameter_map['Registration'] = ['MultiResolutionRegistration']
+    parameter_map['Transform'] = ['AffineTransform']
+    parameter_map['Metric'] = ['AdvancedMattesMutualInformation']
+    parameter_map['Optimizer'] = ['AdaptiveStochasticGradientDescent']
+    parameter_map['ResampleInterpolator'] = ['FinalBSplineInterpolator']
+    parameter_map['Resampler'] = ['DefaultResampler']
+    parameter_map['FixedImagePyramid'] = ['FixedSmoothingImagePyramid']
+    parameter_map['MovingImagePyramid'] = ['MovingSmoothingImagePyramid']
     parameter_map['NumberOfResolutions'] = ['4']
+    parameter_map['MaximumNumberOfIterations'] = ['512']
     parameter_map['NumberOfSpatialSamples'] = ['5000']
+    parameter_map['NewSamplesEveryIteration'] = ['true']
+    parameter_map['ImageSampler'] = ['Random']
+    parameter_map['BSplineInterpolationOrder'] = ['1']
     parameter_map['FinalBSplineInterpolationOrder'] = ['3']
+    parameter_map['DefaultPixelValue'] = ['0']
+    parameter_map['WriteResultImage'] = ['false']
     
     # Créer l'objet Elastix
     elastix = sitk.ElastixImageFilter()
@@ -177,9 +199,10 @@ def process_patient(patient_id):
     
     print(f"  Trouvé {len(valid_regions)} régions valides")
     
-    # Créer les images annotées
+    # Créer les images annotées (AVEC et SANS registration)
     img_hes_annotated = lowres_hes_np.copy()
-    img_cd30_annotated = lowres_cd30_registered.copy()  # Utiliser l'image recalée
+    img_cd30_no_reg_annotated = lowres_cd30_np.copy()  # SANS registration
+    img_cd30_registered_annotated = lowres_cd30_registered.copy()  # AVEC registration
     
     # Annoter les régions
     for region in valid_regions:
@@ -191,23 +214,37 @@ def process_patient(patient_id):
             (255, 0, 0), 8
         )
         
-        # CD30
+        # CD30 - Annoter les deux versions
         region_x_cd30_lr = int(region['x'] / downsample_cd30)
         region_y_cd30_lr = int(region['y'] / downsample_cd30)
         region_size_cd30_lr = int(region_size / downsample_cd30)
         
+        # CD30 SANS registration
         cv2.rectangle(
-            img_cd30_annotated,
+            img_cd30_no_reg_annotated,
             (region_x_cd30_lr, region_y_cd30_lr),
             (region_x_cd30_lr + region_size_cd30_lr, region_y_cd30_lr + region_size_cd30_lr),
             (0, 0, 255), 8
         )
+        
+        # CD30 AVEC registration
+        cv2.rectangle(
+            img_cd30_registered_annotated,
+            (region_x_cd30_lr, region_y_cd30_lr),
+            (region_x_cd30_lr + region_size_cd30_lr, region_y_cd30_lr + region_size_cd30_lr),
+            (0, 255, 0), 8  # Vert pour différencier
+        )
+    
+    # Créer des overlays pour visualiser l'amélioration
+    overlay_no_reg = create_overlay(lowres_hes_np, lowres_cd30_np)
+    overlay_registered = create_overlay(lowres_hes_np, lowres_cd30_registered)
     
     # Nettoyer
     slide_hes.close()
     slide_cd30.close()
     
-    return img_hes_annotated, img_cd30_annotated, len(valid_regions)
+    return (img_hes_annotated, img_cd30_no_reg_annotated, img_cd30_registered_annotated, 
+            overlay_no_reg, overlay_registered, len(valid_regions))
 
 
 # Traiter tous les patients
@@ -218,50 +255,82 @@ print("="*80)
 all_images = []
 for patient_id in patient_ids:
     try:
-        img_hes, img_cd30, n_regions = process_patient(patient_id)
+        img_hes, img_cd30_no_reg, img_cd30_reg, overlay_no_reg, overlay_reg, n_regions = process_patient(patient_id)
         all_images.append({
             'patient_id': patient_id,
             'hes': img_hes,
-            'cd30': img_cd30,
+            'cd30_no_reg': img_cd30_no_reg,
+            'cd30_registered': img_cd30_reg,
+            'overlay_no_reg': overlay_no_reg,
+            'overlay_registered': overlay_reg,
             'n_regions': n_regions
         })
     except Exception as e:
         print(f"  ⚠ Erreur pour {patient_id}: {e}")
         continue
 
-# Créer la grande figure
+# Créer la grande figure - 5 colonnes pour comparaison complète
 print("\n" + "="*80)
 print("CRÉATION DE LA FIGURE FINALE")
 print("="*80)
 
 n_patients = len(all_images)
-fig, axes = plt.subplots(n_patients, 2, figsize=(16, 5*n_patients))
+fig, axes = plt.subplots(n_patients, 5, figsize=(30, 5*n_patients))
 
 # S'assurer que axes est un tableau 2D même avec un seul patient
 if n_patients == 1:
     axes = axes.reshape(1, -1)
 
 for idx, data in enumerate(all_images):
-    # HES
+    # Colonne 1: H&E
     axes[idx, 0].imshow(data['hes'])
     axes[idx, 0].set_title(f"{data['patient_id']} - H&E\n{data['n_regions']} régions", 
-                           fontsize=14, fontweight='bold')
+                           fontsize=12, fontweight='bold')
     axes[idx, 0].axis('off')
     
-    # CD30
-    axes[idx, 1].imshow(data['cd30'])
-    axes[idx, 1].set_title(f"{data['patient_id']} - CD30\n{data['n_regions']} régions", 
-                           fontsize=14, fontweight='bold')
+    # Colonne 2: CD30 SANS registration (rouge)
+    axes[idx, 1].imshow(data['cd30_no_reg'])
+    axes[idx, 1].set_title(f"CD30 SANS registration\nBoîtes rouges", 
+                           fontsize=12, fontweight='bold', color='red')
     axes[idx, 1].axis('off')
+    
+    # Colonne 3: Overlay SANS registration
+    axes[idx, 2].imshow(data['overlay_no_reg'])
+    axes[idx, 2].set_title(f"Overlay SANS registration\n(H&E=rouge, CD30=cyan)", 
+                           fontsize=12, fontweight='bold', color='orange')
+    axes[idx, 2].axis('off')
+    
+    # Colonne 4: CD30 AVEC registration (vert)
+    axes[idx, 3].imshow(data['cd30_registered'])
+    axes[idx, 3].set_title(f"CD30 AVEC registration Elastix\nBoîtes vertes", 
+                           fontsize=12, fontweight='bold', color='green')
+    axes[idx, 3].axis('off')
+    
+    # Colonne 5: Overlay AVEC registration
+    axes[idx, 4].imshow(data['overlay_registered'])
+    axes[idx, 4].set_title(f"Overlay AVEC registration\n(H&E=rouge, CD30=cyan)", 
+                           fontsize=12, fontweight='bold', color='darkgreen')
+    axes[idx, 4].axis('off')
 
-plt.suptitle('Alignement des lames H&E et CD30 - Régions sélectionnées', 
-             fontsize=18, fontweight='bold', y=0.995)
+plt.suptitle('Comparaison: Alignement SANS vs AVEC Registration Elastix\nLes overlays montrent la qualité de l\'alignement', 
+             fontsize=18, fontweight='bold', y=0.998)
 plt.tight_layout()
 
 # Sauvegarder en haute qualité
-plt.savefig(output_file, dpi=500, bbox_inches='tight', format='jpg')
+plt.savefig(output_file, dpi=300, bbox_inches='tight', format='jpg')
 print(f"\n✓ Figure sauvegardée: {output_file}")
 print(f"  Format: JPEG haute qualité (300 DPI)")
 print(f"  Patients inclus: {', '.join([d['patient_id'] for d in all_images])}")
 print(f"  Total régions: {sum([d['n_regions'] for d in all_images])}")
+print("\n" + "="*80)
+print("STRUCTURE DE LA FIGURE (5 colonnes)")
+print("="*80)
+print("  Colonne 1: H&E - Image de référence avec boîtes bleues")
+print("  Colonne 2: CD30 SANS registration - Boîtes ROUGES (alignement initial)")
+print("  Colonne 3: OVERLAY SANS registration - Visualisation de l'alignement initial")
+print("              (H&E=rouge, CD30=cyan, si bien aligné → blanc)")
+print("  Colonne 4: CD30 AVEC registration Elastix - Boîtes VERTES (alignement amélioré)")
+print("  Colonne 5: OVERLAY AVEC registration - Visualisation de l'alignement final")
+print("              (H&E=rouge, CD30=cyan, si bien aligné → blanc)")
+print("="*80)
 print("\n✓ Visualisation terminée!")

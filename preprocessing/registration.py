@@ -12,19 +12,14 @@ import wandb
 import pandas as pd
 from collections import defaultdict
 warnings.filterwarnings('ignore')
-
-# Login to Weights & Biases
 wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
 
-# Configuration
 input_folder = "/gold/data_feasibility"
 output_folder = "./visualizations_ORB"
 os.makedirs(output_folder, exist_ok=True)
 
-# Dictionnaire global pour stocker les métriques de registration
 registration_metrics = defaultdict(lambda: defaultdict(dict))
 
-# Paramètres de base (la taille des régions sera adaptée automatiquement)
 base_region_size = 12000  # Taille de référence, sera ajustée par slide
 overlap_percent = 0.10    # 10% de chevauchement entre les régions
 lowres_level = 2
@@ -72,37 +67,6 @@ def compute_tissue_mask(img_rgb):
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
 
     return mask
-
-
-def enhance_mask_for_registration(mask):
-    """
-    Améliore le masque de tissu pour une meilleure détection de points d'intérêt.
-    Extrait les contours et crée une image avec plus de structure.
-    """
-    # Détection des contours
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    # Créer une image avec les contours
-    contour_img = np.zeros_like(mask)
-    cv2.drawContours(contour_img, contours, -1, 255, 2)
-    
-    # Ajouter la distance transform pour plus de structure interne
-    dist_transform = cv2.distanceTransform(mask, cv2.DIST_L2, 5)
-    dist_transform = np.uint8(255 * dist_transform / np.max(dist_transform))
-    
-    # Combiner contours et distance transform
-    enhanced_mask = cv2.addWeighted(contour_img, 0.7, dist_transform, 0.3, 0)
-    
-    # Appliquer un filtre pour accentuer les détails
-    kernel_detail = np.array([[-1,-1,-1], [-1,8,-1], [-1,-1,-1]])
-    details = cv2.filter2D(enhanced_mask, -1, kernel_detail)
-    details = np.clip(details, 0, 255).astype(np.uint8)
-    
-    # Combiner le masque amélioré avec les détails
-    final_mask = cv2.addWeighted(enhanced_mask, 0.8, details, 0.2, 0)
-    
-    return final_mask
-
 
 
 def perform_region_registration(img_fixed, img_moving, patient_id, region_idx):

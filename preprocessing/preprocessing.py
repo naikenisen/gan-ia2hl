@@ -27,6 +27,9 @@ total_patches = 0
 processed_slides = 0
 failed_slides = 0
 total_patch_count = 0
+patients_to_process = ["AHL001", "AHL003", "AHL004",
+                       "AHL006", "AHL007", "AHL011" ]
+
 
 hes_dir = os.path.join(output_folder, "HES")
 cd30_dir = os.path.join(output_folder, "CD30")
@@ -129,6 +132,8 @@ for hes_file in hes_files:
 print(f"{len(pairs)} paires de slides à traiter")
 
 for idx, (base_id, paths) in enumerate(pairs.items(), 1):
+    if base_id not in patients_to_process:
+        continue
     print(f"Paire {idx}/{len(pairs)}: {base_id}")
     patch_count = process_slide_pair(paths['hes'], paths['cd30'], hes_dir, cd30_dir)
     total_patches += patch_count

@@ -149,9 +149,9 @@ def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
         plt.tight_layout()
         
         output_path = os.path.join(output_folder, f'{patient_id}_0_global_registration.png')
-        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        plt.savefig(output_path, dpi=500, bbox_inches='tight')
         plt.close()
-        print(f"  → Visualisation sauvegardée: {output_path}")
+        print(f"Visualisation sauvegardée: {output_path}")
         
         wandb.log({
             f"{patient_id}/global/visualization": wandb.Image(output_path)

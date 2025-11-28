@@ -28,6 +28,9 @@ def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
     Effectue une registration globale de la lame entière à basse résolution.
     Retourne la transformation globale et l'image CD30 alignée.
     """
+    minimal_paired_points = 3
+    maximal_error_threshold = 8.0
+    ransac_iterations = 2000
     # Conversion en niveaux de gris
     gray_hes = color_traitement(lowres_hes_np)
     gray_cd30 = color_traitement(lowres_cd30_np)
@@ -93,6 +96,7 @@ def build_figure(lowres_hes_np, lowres_cd30_np, patient_id, model):
 
 
 def process_one_slide_pair_visualization(hes_path, cd30_path):
+    lowres_level = 2
     slide_hes = openslide.OpenSlide(hes_path)
     slide_cd30 = openslide.OpenSlide(cd30_path)
     patient_id = os.path.splitext(os.path.basename(hes_path))[0].replace("_HES", "")
@@ -121,22 +125,14 @@ if __name__ == "__main__":
     output_folder = "./visualization"
     os.makedirs(output_folder, exist_ok=True)
     registration_metrics = defaultdict(lambda: defaultdict(dict))
-    lowres_level = 2
-    minimal_paired_points = 3
-    maximal_error_threshold = 8.0
-    ransac_iterations = 2000
     wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
     warnings.filterwarnings('ignore')
     wandb.init(
         project="ia2hl-preprocessing",
         name="global-registration",
         config={
-            "lowres_level": lowres_level,
             "input_folder": input_folder,
             "output_folder": output_folder,
-            "minimal_paired_points": minimal_paired_points,
-            "maximal_error_threshold": maximal_error_threshold,
-            "ransac_iterations": ransac_iterations
         }
     )
 

@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import cv2
 
 folder = "/tmp/data/gold"
-svs_files = [f for f in os.listdir(folder) if f.lower().endswith(".svs")]
+svs_files = [f for f in os.listdir(folder) if f.lower().endswith("HES.svs")]
 level = 2
 
 def compute_tissue_mask(img_rgb):

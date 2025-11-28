@@ -95,7 +95,7 @@ def build_figure(lowres_hes_np, lowres_cd30_np, patient_id, model):
     print(f"Visualisation sauvegardée")
 
 
-def process_one_slide_pair_visualization(hes_path, cd30_path, inlier_ratio):
+def process_one_slide_pair_visualization(hes_path, cd30_path):
     lowres_level = 2
     slide_hes = openslide.OpenSlide(hes_path)
     slide_cd30 = openslide.OpenSlide(cd30_path)
@@ -113,7 +113,7 @@ def process_one_slide_pair_visualization(hes_path, cd30_path, inlier_ratio):
     best_ratio = 0
     best_model = None
     for epoch in range(10):
-        model = register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id)
+        model, inlier_ratio = register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id)
         if model is not None:
             # calculer le ratio d’inliers
             if inlier_ratio > best_ratio:

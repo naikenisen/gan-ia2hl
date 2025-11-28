@@ -149,7 +149,7 @@ pairs = {}
 for hes_file in hes_files:
     base_id = hes_file.replace("_HES.svs", "")
     cd30_file = f"{base_id}_CD30.svs"
-    for cd30_file in cd30_files:
+    if cd30_file in cd30_files:
         pairs[base_id] = {
             'hes': os.path.join(input_folder, hes_file),
             'cd30': os.path.join(input_folder, cd30_file)

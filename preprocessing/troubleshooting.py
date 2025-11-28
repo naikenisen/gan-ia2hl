@@ -32,7 +32,7 @@ lowres_level = 2
 # Initialiser wandb
 wandb.init(
     project="ia2hl-preprocessing",
-    name="akaze-mask-based-registration",
+    name="akaze-mask-based-registration-80pct",
     config={
         "feature_detector": "AKAZE",
         "registration_method": "mask_based",
@@ -44,6 +44,7 @@ wandb.init(
         "input_folder": input_folder,
         "output_folder": output_folder,
         "min_inliers": 20,
+        "min_tissue_percent": 0.80,
         "spatial_coherence": True,
         "global_registration": "tissue_mask_enhanced"
     }
@@ -841,10 +842,10 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
             
             tissue_percent = np.mean(region_mask > 0)
             
-            if region_mask.size == 0 or tissue_percent < 0.20:
+            if region_mask.size == 0 or tissue_percent < 0.80:
                 continue
             
-            print(f"\n✓ Région {region_idx} trouvée à x={region_x}, y={region_y}")
+            print(f"\n✓ Région {region_idx} trouvée à x={region_x}, y={region_y} (tissu: {tissue_percent:.1%})")
             
             # Logger les informations de la région
             wandb.log({

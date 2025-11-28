@@ -67,7 +67,7 @@ def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
     num_inliers = np.sum(inliers)
     inlier_ratio = num_inliers / len(good_matches)
     print(f"Registration done: {num_inliers}/{len(good_matches)} inliers (ratio: {inlier_ratio:.3f})")
-    return model_global
+    return model_global, inlier_ratio
 
 def build_figure(lowres_hes_np, lowres_cd30_np, patient_id, model):
     # Appliquer la transformation globale
@@ -95,7 +95,7 @@ def build_figure(lowres_hes_np, lowres_cd30_np, patient_id, model):
     print(f"Visualisation sauvegardée")
 
 
-def process_one_slide_pair_visualization(hes_path, cd30_path):
+def process_one_slide_pair_visualization(hes_path, cd30_path, inlier_ratio):
     lowres_level = 2
     slide_hes = openslide.OpenSlide(hes_path)
     slide_cd30 = openslide.OpenSlide(cd30_path)
@@ -110,10 +110,21 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
     lowres_hes_np = np.array(lowres_hes)
     lowres_cd30_np = np.array(lowres_cd30)
 
-    model = register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id)
-    if model is None:
+    best_ratio = 0
+    best_model = None
+    for epoch in range(10):
+        model = register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id)
+        if model is not None:
+            # calculer le ratio d’inliers
+            if inlier_ratio > best_ratio:
+                best_ratio = inlier_ratio
+                best_model = model
+            if best_ratio >= 0.1:
+                break
+    if best_ratio < 0.1:
+        print("Registration échouée pour cette lame")
         return
-    build_figure(lowres_hes_np, lowres_cd30_np, patient_id, model)
+    build_figure(lowres_hes_np, lowres_cd30_np, patient_id, best_model)
             
     slide_hes.close()
     slide_cd30.close()

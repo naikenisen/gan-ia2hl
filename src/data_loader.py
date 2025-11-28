@@ -7,19 +7,23 @@ from src.config import BASE_HandE_PATH, BASE_IHC_PATH, IMG_HEIGHT, IMG_WIDTH, BA
                 
 # fonction pour récupérer les chemins des images HandE et IHC
 def get_image_paths(hande_base, ihc_base):
+    # Liste des patients à charger
+    allowed_patients = {'AHL001', 'AHL002', 'AHL004', 'AHL006', 'AHL011'}
+    
     hande_paths, ihc_paths = [], []
     for patient_dir in os.listdir(hande_base):
+        # Filtrer uniquement les patients autorisés
+        if patient_dir not in allowed_patients:
+            continue
+            
         patient_hande_path = os.path.join(hande_base, patient_dir)
         patient_ihc_path = os.path.join(ihc_base, patient_dir)
         if not os.path.isdir(patient_hande_path): continue
-        for subregion_dir in os.listdir(patient_hande_path):
-            subregion_hande_path = os.path.join(patient_hande_path, subregion_dir)
-            subregion_ihc_path = os.path.join(patient_ihc_path, subregion_dir)
-            if not os.path.isdir(subregion_hande_path): continue
-            for img_name in os.listdir(subregion_hande_path):
-                if img_name.endswith('.jpg'):
-                    hande_paths.append(os.path.join(subregion_hande_path, img_name))
-                    ihc_paths.append(os.path.join(subregion_ihc_path, img_name))
+        # Parcourir directement les images dans le dossier du patient
+        for img_name in os.listdir(patient_hande_path):
+            if img_name.endswith('.jpg'):
+                hande_paths.append(os.path.join(patient_hande_path, img_name))
+                ihc_paths.append(os.path.join(patient_ihc_path, img_name))
     return hande_paths, ihc_paths
 
 # fonction pour prétraiter les images et créer un Dataset personnalisé

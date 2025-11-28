@@ -42,4 +42,4 @@ for idx, filename in enumerate(svs_files):
     plt.axis("off")
 
 plt.tight_layout()
-plt.savefig("tissue_masks.png", dpi=300)
+plt.savefig("tissue_masks.png", dpi=500)

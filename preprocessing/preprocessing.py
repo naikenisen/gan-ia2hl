@@ -51,47 +51,30 @@ def patch_has_tissue(x, y, mask, downsample):
     return tissue_ratio >= tissue_threshold
 
 def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
-
-    print(f"\n{'='*80}")
-    print(f"Traitement de la paire:")
-    print(f"  HES:  {os.path.basename(hes_path)}")
-    print(f"  CD30: {os.path.basename(cd30_path)}")
-    print(f"{'='*80}")
-
     slide_hes = openslide.OpenSlide(hes_path)
     slide_cd30 = openslide.OpenSlide(cd30_path)
-    
-
     patient_id = os.path.splitext(os.path.basename(hes_path))[0].replace("_HES", "")
-    
-    # Créer les répertoires de sortie pour ce patient
     patient_hes_dir = os.path.join(hes_dir, patient_id)
     patient_cd30_dir = os.path.join(cd30_dir, patient_id)
     os.makedirs(patient_hes_dir, exist_ok=True)
     os.makedirs(patient_cd30_dir, exist_ok=True)
-    
-    # Étape 1: Charger les images basse résolution
-    print("\n[1/4] Chargement des images basse résolution...")
+
+    print("Chargement des images basse résolution...")
     w_lr_hes, h_lr_hes = slide_hes.level_dimensions[lowres_level]
     w_lr_cd30, h_lr_cd30 = slide_cd30.level_dimensions[lowres_level]
-
     lowres_hes = slide_hes.read_region(
         (0, 0), lowres_level, (w_lr_hes, h_lr_hes)
     ).convert("RGB")
-
     lowres_cd30 = slide_cd30.read_region(
         (0, 0), lowres_level, (w_lr_cd30, h_lr_cd30)
     ).convert("RGB")
-
     lowres_hes_np = np.array(lowres_hes)
     lowres_cd30_np = np.array(lowres_cd30)
 
-    # Étape 2: Calcul du masque de tissu
     print("\n[2/4] Calcul du masque de tissu...")
     mask_hes = compute_tissue_mask(lowres_hes)
 
-    # Étape 3: Découpe en sous-régions et alignement
-    print("\n[3/4] Découpe en sous-régions et alignement...")
+    print("Découpe en sous-régions et alignement...")
     w0_hes, h0_hes = slide_hes.level_dimensions[0]
     w0_cd30, h0_cd30 = slide_cd30.level_dimensions[0]
     downsample_hes = int(slide_hes.level_downsamples[lowres_level])
@@ -202,7 +185,7 @@ def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
                         "patch_y": y
                     })
             
-            print(f"    ✓ {patch_count} paires de patches extraites")
+            print(f"{patch_count} paires de patches extraites")
 
             wandb.log({
                 f"{patient_id}_region_{region_index}_patches": patch_count,
@@ -212,7 +195,7 @@ def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
             
             region_index += 1
     
-    print(f"\n✓ Total: {total_patch_count} paires de patches extraites dans {region_index} sous-régions")
+    print(f"Total: {total_patch_count} paires de patches extraites")
 
     wandb.log({
         f"{patient_id}_total_patches": total_patch_count,
@@ -281,19 +264,10 @@ for idx, (base_id, paths) in enumerate(pairs.items(), 1):
         wandb.log({"failed_slides": failed_slides})
         continue
 
-print(f"\n{'='*80}")
 print("TRAITEMENT TERMINÉ")
-print(f"{'='*80}")
 print(f"Total: {total_patches} paires de patches extraites")
 print(f"Lames traitées avec succès: {processed_slides}/{len(pairs)}")
 print(f"Lames échouées: {failed_slides}")
 print(f"Patches HES sauvegardés dans: {hes_dir}")
 print(f"Patches CD30 sauvegardés dans: {cd30_dir}")
-
-wandb.log({
-    "final_total_patches": total_patches,
-    "final_processed_slides": processed_slides,
-    "final_failed_slides": failed_slides
-})
-
 wandb.finish()

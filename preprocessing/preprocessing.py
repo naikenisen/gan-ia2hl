@@ -10,142 +10,45 @@ from skimage.transform import AffineTransform
 import warnings
 import wandb
 warnings.filterwarnings('ignore')
+from preprocessing.create_mask import compute_tissue_mask
+wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
+
+# todo : enlever les régions et ne garder que les patches extraits
+# todo : utiliser create mask pour le masque otsu
+# todo : utiliser registration.py pour l'alignement global
 
 # Configuration
 input_folder = "/gold/data_feasibility"
 output_folder = "/silver/ube/extract"
 patch_size = 2000
-region_size = 12000  # Taille des sous-régions (pour lames ~80000x70000)
-stride_region = 12000  # Stride entre sous-régions (non-overlap si = region_size)
+stride_patch = 1500
 lowres_level = 2
 tissue_threshold = 0.60
-jpeg_quality = 100  # Qualité JPEG pour compression
 
 hes_dir = os.path.join(output_folder, "HES")
 cd30_dir = os.path.join(output_folder, "CD30")
 os.makedirs(hes_dir, exist_ok=True)
 os.makedirs(cd30_dir, exist_ok=True)
 
-# Initialisation wandb
-wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
 wandb.init(
     project="ia2hl-preprocessing",
     config={
         "patch_size": patch_size,
-        "region_size": region_size,
-        "stride_region": stride_region,
+        "stride_patch": stride_patch,
         "tissue_threshold": tissue_threshold,
-        "jpeg_quality": jpeg_quality,
         "lowres_level": lowres_level
     }
 )
-
-def compute_tissue_mask(img_rgb):
-    """Calcule un masque binaire des tissus basé sur la saturation."""
-    img_np = np.array(img_rgb)
-    hsv = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
-    sat = hsv[:, :, 1]
-
-    _, mask = cv2.threshold(sat, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    kernel = np.ones((5, 5), np.uint8)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-
-    return mask
-
-
-def align_images_orb(img_fixed, img_moving):
-    """
-    Aligne deux images en utilisant ORB + RANSAC.
-    
-    Args:
-        img_fixed: Image de référence (RGB numpy array)
-        img_moving: Image à aligner (RGB numpy array)
-    
-    Returns:
-        transformation: Matrice de transformation affine
-        aligned_img: Image alignée
-        success: Booléen indiquant le succès de l'alignement
-    """
-    # Conversion en niveaux de gris
-    gray_fixed = cv2.cvtColor(img_fixed, cv2.COLOR_RGB2GRAY)
-    gray_moving = cv2.cvtColor(img_moving, cv2.COLOR_RGB2GRAY)
-    
-    # Détection de features avec ORB
-    orb = cv2.ORB_create(nfeatures=5000)
-    
-    kp1, desc1 = orb.detectAndCompute(gray_fixed, None)
-    kp2, desc2 = orb.detectAndCompute(gray_moving, None)
-    
-    if desc1 is None or desc2 is None or len(kp1) < 4 or len(kp2) < 4:
-        print("Pas assez de points détectés pour l'alignement")
-        return None, img_moving, False
-    
-    # Matching des descripteurs
-    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-    matches = bf.match(desc1, desc2)
-    matches = sorted(matches, key=lambda x: x.distance)
-    
-    # Garder les meilleurs matches
-    num_good_matches = min(len(matches), max(50, int(len(matches) * 0.15)))
-    good_matches = matches[:num_good_matches]
-    
-    if len(good_matches) < 4:
-        print("Pas assez de correspondances pour l'alignement")
-        return None, img_moving, False
-    
-    # Extraire les coordonnées des points correspondants
-    src_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 2)
-    dst_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 2)
-    
-    # Estimation de la transformation affine avec RANSAC
-    try:
-        model, inliers = ransac(
-            (src_pts, dst_pts),
-            AffineTransform,
-            min_samples=3,
-            residual_threshold=5.0,
-            max_trials=1000
-        )
-        
-        if model is None or np.sum(inliers) < 4:
-            print(f"RANSAC échoué (inliers: {np.sum(inliers) if inliers is not None else 0})")
-            return None, img_moving, False
-        
-        print(f"Alignement réussi avec {np.sum(inliers)} inliers sur {len(good_matches)} matches")
-        
-        # Appliquer la transformation
-        h, w = img_fixed.shape[:2]
-        aligned_img = cv2.warpAffine(
-            img_moving, 
-            model.params[:2], 
-            (w, h),
-            flags=cv2.INTER_LINEAR,
-            borderMode=cv2.BORDER_CONSTANT,
-            borderValue=(255, 255, 255)
-        )
-        
-        return model, aligned_img, True
-        
-    except Exception as e:
-        print(f"Erreur lors de l'alignement: {e}")
-        return None, img_moving, False
-
 
 def patch_has_tissue(x, y, mask, downsample):
     x_lr = x // downsample
     y_lr = y // downsample
     ps_lr = patch_size // downsample
-
     patch_mask = mask[y_lr:y_lr+ps_lr, x_lr:x_lr+ps_lr]
-
     if patch_mask.size == 0:
         return False
-
     tissue_ratio = np.mean(patch_mask > 0)
     return tissue_ratio >= tissue_threshold
-
 
 def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
 
@@ -284,10 +187,8 @@ def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
                     # Nommer les patches selon leurs coordonnées (relatives à la région)
                     patch_name = f"patch_x{x_local}_y{y_local}.jpg"
 
-                    patch_hes.save(os.path.join(subregion_hes_dir, patch_name), 
-                                   quality=jpeg_quality, optimize=True)
-                    patch_cd30.save(os.path.join(subregion_cd30_dir, patch_name), 
-                                    quality=jpeg_quality, optimize=True)
+                    patch_hes.save(os.path.join(subregion_hes_dir, patch_name), optimize=True)
+                    patch_cd30.save(os.path.join(subregion_cd30_dir, patch_name), optimize=True)
                     
                     patch_count += 1
                     total_patch_count += 1

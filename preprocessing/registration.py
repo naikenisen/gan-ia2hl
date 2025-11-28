@@ -12,24 +12,17 @@ import wandb
 import pandas as pd
 from collections import defaultdict
 warnings.filterwarnings('ignore')
-from preprocessing.create_mask import compute_tissue_mask
-
-# Login to Weights & Biases
 wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
 
 # Configuration
 input_folder = "/gold/data_feasibility"
 output_folder = "./visualizations_ORB"
 os.makedirs(output_folder, exist_ok=True)
-
-# Dictionnaire global pour stocker les métriques de registration
 registration_metrics = defaultdict(lambda: defaultdict(dict))
-
 region_size = 12000
 overlap_percent = 0.10  # 20% de chevauchement entre les régions
 lowres_level = 2
 
-# Initialiser wandb
 wandb.init(
     project="ia2hl-preprocessing",
     name="akaze-registration-visualization",
@@ -45,14 +38,11 @@ wandb.init(
     }
 )
 
-
 def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
     """
     Effectue une registration globale de la lame entière à basse résolution.
     Retourne la transformation globale et l'image CD30 alignée.
     """
-    print("\n[REGISTRATION GLOBALE] Alignement de la lame entière...")
-    
     # Conversion en niveaux de gris
     gray_hes = cv2.cvtColor(lowres_hes_np, cv2.COLOR_RGB2GRAY)
     gray_cd30 = cv2.cvtColor(lowres_cd30_np, cv2.COLOR_RGB2GRAY)
@@ -71,7 +61,7 @@ def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
     })
     
     if desc1 is None or desc2 is None or len(kp1) < 4 or len(kp2) < 4:
-        print("  ✗ Pas assez de points détectés pour la registration globale")
+        print("Pas assez de points détectés pour la registration globale")
         wandb.log({f"{patient_id}/global/status": "failed_detection"})
         return None, lowres_cd30_np
     
@@ -84,7 +74,7 @@ def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
     num_good_matches = min(len(matches), max(100, int(len(matches) * 0.25)))
     good_matches = matches[:num_good_matches]
     
-    print(f"  Correspondances: {len(matches)} total, {len(good_matches)} sélectionnées")
+    print(f"Correspondances: {len(matches)} total, {len(good_matches)} sélectionnées")
     
     wandb.log({
         f"{patient_id}/global/total_matches": len(matches),
@@ -92,7 +82,7 @@ def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
     })
     
     if len(good_matches) < 4:
-        print("  ✗ Pas assez de correspondances pour la registration globale")
+        print("Pas assez de correspondances pour la registration globale")
         wandb.log({f"{patient_id}/global/status": "failed_matching"})
         return None, lowres_cd30_np
     
@@ -170,7 +160,7 @@ def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
         return model_global, aligned_cd30_global
         
     except Exception as e:
-        print(f"  ✗ Erreur lors de la registration globale: {e}")
+        print(f"Erreur lors de la registration globale: {e}")
         wandb.log({
             f"{patient_id}/global/status": "failed_error",
             f"{patient_id}/global/error": str(e)
@@ -220,43 +210,17 @@ for hes_file in hes_files:
             'cd30': os.path.join(input_folder, cd30_file)
         }
 
-print(f"\n{len(pairs)} paires disponibles")
+print(f"{len(pairs)} paires disponibles")
 
-# Traiter toutes les paires de patients
-if pairs:
-    total_patients = len(pairs)
-    patients_with_regions = 0
-    total_regions = 0
-    
-    print(f"\nTraitement de {total_patients} patient(s)...")
-    
-    for idx, (patient_id, paths) in enumerate(pairs.items(), 1):
-        print(f"\n[Patient {idx}/{total_patients}] Traitement de: {patient_id}")
-        regions_count = process_one_slide_pair_visualization(paths['hes'], paths['cd30'])
-        
-        if regions_count > 0:
-            patients_with_regions += 1
-            total_regions += regions_count
-    
-    # Logger le résumé final
-    wandb.log({
-        "summary/total_patients": total_patients,
-        "summary/patients_with_regions": patients_with_regions,
-        "summary/total_regions_processed": total_regions,
-        "summary/avg_regions_per_patient": total_regions / total_patients if total_patients > 0 else 0,
-    })
-    
-    print(f"\n{'='*80}")
-    print(f"✓ TRAITEMENT TERMINÉ")
-    print(f"{'='*80}")
-    print(f"Patients traités: {total_patients}")
-    print(f"Patients avec régions réussies: {patients_with_regions}")
-    print(f"Total de régions traitées: {total_regions}")
-    print(f"Les visualisations sont sauvegardées dans: {output_folder}")
-    print(f"{'='*80}")
-    
-    # Finir la session wandb
-    wandb.finish()
-else:
-    print("\n✗ Aucune paire de slides trouvée")
-    wandb.finish()
+total_patients = len(pairs)
+patients_with_regions = 0
+total_regions = 0
+
+print(f"Traitement de {total_patients} patients")
+
+for idx, (patient_id, paths) in enumerate(pairs.items(), 1):
+    print(f"\n[Patient {idx}/{total_patients}] Traitement de: {patient_id}")
+    process_one_slide_pair_visualization(paths['hes'], paths['cd30'])
+
+print(f"TRAITEMENT TERMINÉ")
+wandb.finish()

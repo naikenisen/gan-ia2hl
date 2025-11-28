@@ -24,23 +24,28 @@ os.makedirs(output_folder, exist_ok=True)
 # Dictionnaire global pour stocker les métriques de registration
 registration_metrics = defaultdict(lambda: defaultdict(dict))
 
-region_size = 12000
-overlap_percent = 0.10  # 20% de chevauchement entre les régions
+# Paramètres de base (la taille des régions sera adaptée automatiquement)
+base_region_size = 12000  # Taille de référence, sera ajustée par slide
+overlap_percent = 0.10    # 10% de chevauchement entre les régions
 lowres_level = 2
 
 # Initialiser wandb
 wandb.init(
     project="ia2hl-preprocessing",
-    name="akaze-registration-visualization",
+    name="akaze-mask-based-registration",
     config={
         "feature_detector": "AKAZE",
-        "region_size": region_size,
+        "registration_method": "mask_based",
+        "mask_enhancement": True,
+        "base_region_size": base_region_size,
+        "adaptive_regions": True,
         "overlap_percent": overlap_percent,
         "lowres_level": lowres_level,
         "input_folder": input_folder,
         "output_folder": output_folder,
         "min_inliers": 20,
-        "spatial_coherence": True
+        "spatial_coherence": True,
+        "global_registration": "tissue_mask_enhanced"
     }
 )
 
@@ -66,6 +71,36 @@ def compute_tissue_mask(img_rgb):
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
 
     return mask
+
+
+def enhance_mask_for_registration(mask):
+    """
+    Améliore le masque de tissu pour une meilleure détection de points d'intérêt.
+    Extrait les contours et crée une image avec plus de structure.
+    """
+    # Détection des contours
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Créer une image avec les contours
+    contour_img = np.zeros_like(mask)
+    cv2.drawContours(contour_img, contours, -1, 255, 2)
+    
+    # Ajouter la distance transform pour plus de structure interne
+    dist_transform = cv2.distanceTransform(mask, cv2.DIST_L2, 5)
+    dist_transform = np.uint8(255 * dist_transform / np.max(dist_transform))
+    
+    # Combiner contours et distance transform
+    enhanced_mask = cv2.addWeighted(contour_img, 0.7, dist_transform, 0.3, 0)
+    
+    # Appliquer un filtre pour accentuer les détails
+    kernel_detail = np.array([[-1,-1,-1], [-1,8,-1], [-1,-1,-1]])
+    details = cv2.filter2D(enhanced_mask, -1, kernel_detail)
+    details = np.clip(details, 0, 255).astype(np.uint8)
+    
+    # Combiner le masque amélioré avec les détails
+    final_mask = cv2.addWeighted(enhanced_mask, 0.8, details, 0.2, 0)
+    
+    return final_mask
 
 
 
@@ -477,35 +512,97 @@ def generate_patient_overview_figure(lowres_hes_np, patient_id, regions_info):
 def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
     """
     Effectue une registration globale de la lame entière à basse résolution.
+    Utilise les masques de tissu pour une registration plus robuste.
     Retourne la transformation globale et l'image CD30 alignée.
     """
     print("\n[REGISTRATION GLOBALE] Alignement de la lame entière...")
     
-    # Conversion en niveaux de gris
+    # Calculer les masques de tissu pour les deux lames
+    print("  → Calcul des masques de tissu...")
+    mask_hes = compute_tissue_mask(lowres_hes_np)
+    mask_cd30 = compute_tissue_mask(lowres_cd30_np)
+    
+    # Améliorer les masques pour la détection de points d'intérêt
+    enhanced_mask_hes = enhance_mask_for_registration(mask_hes)
+    enhanced_mask_cd30 = enhance_mask_for_registration(mask_cd30)
+    
+    # Conversion en niveaux de gris des images originales
     gray_hes = cv2.cvtColor(lowres_hes_np, cv2.COLOR_RGB2GRAY)
     gray_cd30 = cv2.cvtColor(lowres_cd30_np, cv2.COLOR_RGB2GRAY)
     
-    # Détection AKAZE sur la lame entière (meilleur que ORB pour l'histologie)
+    # Détection AKAZE - Trois approches combinées
     akaze = cv2.AKAZE_create()
-    kp1, desc1 = akaze.detectAndCompute(gray_hes, None)
-    kp2, desc2 = akaze.detectAndCompute(gray_cd30, None)
     
-    print(f"  Points détectés - HES: {len(kp1) if kp1 else 0}, CD30: {len(kp2) if kp2 else 0}")
+    # Option 1: Détection sur masques améliorés (contours + structure)
+    print("  → Détection AKAZE sur les masques améliorés...")
+    kp1_mask, desc1_mask = akaze.detectAndCompute(enhanced_mask_hes, None)
+    kp2_mask, desc2_mask = akaze.detectAndCompute(enhanced_mask_cd30, None)
     
-    # Logger les keypoints globaux
+    # Option 2: Détection sur images grises mais SEULEMENT dans les zones de tissu
+    print("  → Détection AKAZE sur images avec masques de tissu...")
+    kp1_masked, desc1_masked = akaze.detectAndCompute(gray_hes, mask=mask_hes)
+    kp2_masked, desc2_masked = akaze.detectAndCompute(gray_cd30, mask=mask_cd30)
+    
+    # Option 3: Détection sur masques binaires simples (pour la forme générale)
+    print("  → Détection AKAZE sur masques binaires...")
+    kp1_binary, desc1_binary = akaze.detectAndCompute(mask_hes, None)
+    kp2_binary, desc2_binary = akaze.detectAndCompute(mask_cd30, None)
+    
+    # Combiner les trois approches pour plus de robustesse
+    kp1_all = []
+    kp2_all = []
+    desc1_all = []
+    desc2_all = []
+    
+    # Ajouter les keypoints et descripteurs de chaque méthode
+    methods = [
+        ("enhanced", kp1_mask, desc1_mask, kp2_mask, desc2_mask),
+        ("masked", kp1_masked, desc1_masked, kp2_masked, desc2_masked),
+        ("binary", kp1_binary, desc1_binary, kp2_binary, desc2_binary)
+    ]
+    
+    for method_name, kp1, desc1, kp2, desc2 in methods:
+        if kp1 and desc1 is not None and kp2 and desc2 is not None:
+            kp1_all.extend(kp1)
+            kp2_all.extend(kp2)
+            desc1_all.append(desc1)
+            desc2_all.append(desc2)
+            print(f"    {method_name}: {len(kp1)} points HES, {len(kp2)} points CD30")
+    
+    # Combiner tous les descripteurs
+    if desc1_all and desc2_all:
+        desc1_combined = np.vstack(desc1_all)
+        desc2_combined = np.vstack(desc2_all)
+        kp1_combined = kp1_all
+        kp2_combined = kp2_all
+    else:
+        desc1_combined = None
+        desc2_combined = None
+        kp1_combined = []
+        kp2_combined = []
+    
+    print(f"  Points combinés - HES: {len(kp1_combined)}, CD30: {len(kp2_combined)}")
+    
+    # Logger les keypoints par méthode
     wandb.log({
-        f"{patient_id}/global/keypoints_hes": len(kp1) if kp1 else 0,
-        f"{patient_id}/global/keypoints_cd30": len(kp2) if kp2 else 0,
+        f"{patient_id}/global/keypoints_hes_enhanced": len(kp1_mask) if kp1_mask else 0,
+        f"{patient_id}/global/keypoints_cd30_enhanced": len(kp2_mask) if kp2_mask else 0,
+        f"{patient_id}/global/keypoints_hes_masked": len(kp1_masked) if kp1_masked else 0,
+        f"{patient_id}/global/keypoints_cd30_masked": len(kp2_masked) if kp2_masked else 0,
+        f"{patient_id}/global/keypoints_hes_binary": len(kp1_binary) if kp1_binary else 0,
+        f"{patient_id}/global/keypoints_cd30_binary": len(kp2_binary) if kp2_binary else 0,
+        f"{patient_id}/global/keypoints_hes_total": len(kp1_combined),
+        f"{patient_id}/global/keypoints_cd30_total": len(kp2_combined),
     })
     
-    if desc1 is None or desc2 is None or len(kp1) < 4 or len(kp2) < 4:
+    if desc1_combined is None or desc2_combined is None or len(kp1_combined) < 4 or len(kp2_combined) < 4:
         print("  ✗ Pas assez de points détectés pour la registration globale")
         wandb.log({f"{patient_id}/global/status": "failed_detection"})
         return None, lowres_cd30_np
     
     # Matching (AKAZE utilise des descripteurs binaires)
     bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-    matches = bf.match(desc1, desc2)
+    matches = bf.match(desc1_combined, desc2_combined)
     matches = sorted(matches, key=lambda x: x.distance)
     
     # AKAZE produit généralement plus de matches de qualité, on peut être plus sélectif
@@ -525,8 +622,8 @@ def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
         return None, lowres_cd30_np
     
     # Extraire les points
-    src_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 2)
-    dst_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 2)
+    src_pts = np.float32([kp2_combined[m.trainIdx].pt for m in good_matches]).reshape(-1, 2)
+    dst_pts = np.float32([kp1_combined[m.queryIdx].pt for m in good_matches]).reshape(-1, 2)
     
     # RANSAC pour la transformation globale
     try:
@@ -566,33 +663,57 @@ def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
             borderValue=(255, 255, 255)
         )
         
-        # Visualisation de la registration globale
-        fig, axes = plt.subplots(1, 3, figsize=(20, 7))
+        # Visualisation de la registration globale avec les masques
+        fig, axes = plt.subplots(2, 4, figsize=(24, 12))
         
-        axes[0].imshow(lowres_hes_np)
-        axes[0].set_title('HES (référence)', fontsize=14, fontweight='bold')
-        axes[0].axis('off')
+        # Première ligne : Images originales et alignées
+        axes[0, 0].imshow(lowres_hes_np)
+        axes[0, 0].set_title('HES (référence)', fontsize=12, fontweight='bold')
+        axes[0, 0].axis('off')
         
-        axes[1].imshow(lowres_cd30_np)
-        axes[1].set_title('CD30 (originale)', fontsize=14, fontweight='bold')
-        axes[1].axis('off')
+        axes[0, 1].imshow(lowres_cd30_np)
+        axes[0, 1].set_title('CD30 (originale)', fontsize=12, fontweight='bold')
+        axes[0, 1].axis('off')
         
-        axes[2].imshow(aligned_cd30_global)
-        axes[2].set_title(f'CD30 (alignée globalement)\n{num_inliers} inliers, ratio: {inlier_ratio:.3f}', 
-                         fontsize=14, fontweight='bold')
-        axes[2].axis('off')
+        axes[0, 2].imshow(aligned_cd30_global)
+        axes[0, 2].set_title(f'CD30 (alignée)\n{num_inliers} inliers, ratio: {inlier_ratio:.3f}', 
+                           fontsize=12, fontweight='bold')
+        axes[0, 2].axis('off')
         
-        plt.suptitle(f'Patient {patient_id}\nRegistration globale de la lame entière', 
+        # Superposition pour validation
+        overlay = cv2.addWeighted(lowres_hes_np, 0.5, aligned_cd30_global, 0.5, 0)
+        axes[0, 3].imshow(overlay)
+        axes[0, 3].set_title('Superposition HES+CD30', fontsize=12, fontweight='bold')
+        axes[0, 3].axis('off')
+        
+        # Deuxième ligne : Masques utilisés pour la registration
+        axes[1, 0].imshow(mask_hes, cmap='gray')
+        axes[1, 0].set_title('Masque HES', fontsize=12, fontweight='bold')
+        axes[1, 0].axis('off')
+        
+        axes[1, 1].imshow(mask_cd30, cmap='gray')
+        axes[1, 1].set_title('Masque CD30', fontsize=12, fontweight='bold')
+        axes[1, 1].axis('off')
+        
+        axes[1, 2].imshow(enhanced_mask_hes, cmap='gray')
+        axes[1, 2].set_title('Masque HES amélioré', fontsize=12, fontweight='bold')
+        axes[1, 2].axis('off')
+        
+        axes[1, 3].imshow(enhanced_mask_cd30, cmap='gray')
+        axes[1, 3].set_title('Masque CD30 amélioré', fontsize=12, fontweight='bold')
+        axes[1, 3].axis('off')
+        
+        plt.suptitle(f'Patient {patient_id}\nRegistration globale basée sur les masques de tissu', 
                     fontsize=16, fontweight='bold', y=0.98)
         plt.tight_layout()
         
-        output_path = os.path.join(output_folder, f'{patient_id}_0_global_registration.png')
+        output_path = os.path.join(output_folder, f'{patient_id}_0_global_registration_masks.png')
         plt.savefig(output_path, dpi=150, bbox_inches='tight')
         plt.close()
-        print(f"  → Visualisation sauvegardée: {output_path}")
+        print(f"  → Visualisation avec masques sauvegardée: {output_path}")
         
         wandb.log({
-            f"{patient_id}/global/visualization": wandb.Image(output_path)
+            f"{patient_id}/global/visualization_masks": wandb.Image(output_path)
         })
         
         return model_global, aligned_cd30_global
@@ -604,6 +725,34 @@ def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
             f"{patient_id}/global/error": str(e)
         })
         return None, lowres_cd30_np
+
+
+def calculate_adaptive_region_size(slide_width, slide_height, target_regions_per_axis=4):
+    """
+    Calcule la taille de région adaptée aux dimensions de la lame.
+    
+    Args:
+        slide_width: Largeur de la lame en pixels (niveau 0)
+        slide_height: Hauteur de la lame en pixels (niveau 0)  
+        target_regions_per_axis: Nombre cible de régions par axe
+        
+    Returns:
+        region_size: Taille optimale des régions en pixels
+    """
+    # Calculer la taille basée sur la plus petite dimension
+    min_dimension = min(slide_width, slide_height)
+    
+    # Taille de région = dimension minimale / nombre de régions cibles
+    base_region_size = min_dimension // target_regions_per_axis
+    
+    # Arrondir à un multiple de 1000 pour la simplicité
+    region_size = ((base_region_size // 1000) + 1) * 1000
+    
+    # Limites de sécurité
+    region_size = max(region_size, 6000)   # Minimum 6000px
+    region_size = min(region_size, 20000)  # Maximum 20000px
+    
+    return region_size
 
 
 def process_one_slide_pair_visualization(hes_path, cd30_path):
@@ -618,10 +767,20 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
     
     patient_id = os.path.splitext(os.path.basename(hes_path))[0].replace("_HES", "")
     
+    # Obtenir les dimensions de la lame niveau 0
+    w0_hes, h0_hes = slide_hes.level_dimensions[0]
+    w0_cd30, h0_cd30 = slide_cd30.level_dimensions[0]
+    
+    # Calculer la taille de région adaptée
+    adaptive_region_size = calculate_adaptive_region_size(w0_hes, h0_hes)
+    print(f"\n[ADAPTATION] Dimensions lame HES: {w0_hes}x{h0_hes}")
+    print(f"[ADAPTATION] Taille de région adaptée: {adaptive_region_size}px")
+    
     # Logger les informations de la slide
     wandb.log({
         f"{patient_id}/slide_dimensions_hes": f"{slide_hes.level_dimensions[0]}",
         f"{patient_id}/slide_dimensions_cd30": f"{slide_cd30.level_dimensions[0]}",
+        f"{patient_id}/adaptive_region_size": adaptive_region_size,
     })
     
     # Charger les images basse résolution
@@ -652,13 +811,17 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
     
     # Trouver toutes les régions avec du tissu et effectuer la registration
     print("\n[4/4] Registration des régions avec tissu...")
-    w0_hes, h0_hes = slide_hes.level_dimensions[0]
     downsample_hes = int(slide_hes.level_downsamples[lowres_level])
     downsample_cd30 = int(slide_cd30.level_downsamples[lowres_level])
     
+    # Utiliser la taille de région adaptée au lieu de la constante globale
+    current_region_size = adaptive_region_size
+    
     # Calculer le pas (stride) avec overlap
-    stride = int(region_size * (1 - overlap_percent))
-    print(f"Taille de région: {region_size}px, Stride: {stride}px (overlap: {overlap_percent*100}%)")
+    stride = int(current_region_size * (1 - overlap_percent))
+    print(f"Taille de région adaptée: {current_region_size}px")
+    print(f"Stride: {stride}px (overlap: {overlap_percent*100}%)")
+    print(f"Nombre estimé de régions: {(w0_hes//stride) * (h0_hes//stride)}")
     
     regions_processed = 0
     region_idx = 0
@@ -666,12 +829,12 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
     
     for region_y in range(0, h0_hes, stride):
         for region_x in range(0, w0_hes, stride):
-            if region_x + region_size > w0_hes or region_y + region_size > h0_hes:
+            if region_x + current_region_size > w0_hes or region_y + current_region_size > h0_hes:
                 continue
             
             region_x_lr = int(region_x / downsample_hes)
             region_y_lr = int(region_y / downsample_hes)
-            region_size_lr = int(region_size / downsample_hes)
+            region_size_lr = int(current_region_size / downsample_hes)
             
             region_mask = mask_hes[region_y_lr:region_y_lr+region_size_lr, 
                                    region_x_lr:region_x_lr+region_size_lr]
@@ -696,7 +859,7 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
             
             region_x_cd30_lr = int(region_x / downsample_cd30)
             region_y_cd30_lr = int(region_y / downsample_cd30)
-            region_size_cd30_lr = int(region_size / downsample_cd30)
+            region_size_cd30_lr = int(current_region_size / downsample_cd30)
             
             if region_x_cd30_lr + region_size_cd30_lr > w_lr_cd30 or region_y_cd30_lr + region_size_cd30_lr > h_lr_cd30:
                 continue

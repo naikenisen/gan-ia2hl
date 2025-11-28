@@ -16,7 +16,7 @@ wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
 
 # Configuration
 input_folder = "/gold/data_feasibility"
-output_folder = "./visualizations_ORB"
+output_folder = "./visualization"
 os.makedirs(output_folder, exist_ok=True)
 registration_metrics = defaultdict(lambda: defaultdict(dict))
 lowres_level = 2

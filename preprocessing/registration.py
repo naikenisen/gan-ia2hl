@@ -20,6 +20,9 @@ output_folder = "./visualization"
 os.makedirs(output_folder, exist_ok=True)
 registration_metrics = defaultdict(lambda: defaultdict(dict))
 lowres_level = 2
+minimal_paired_points = 3
+maximal_error_threshold = 8.0
+ransac_iterations = 2000
 
 wandb.init(
     project="ia2hl-preprocessing",
@@ -27,7 +30,10 @@ wandb.init(
     config={
         "lowres_level": lowres_level,
         "input_folder": input_folder,
-        "output_folder": output_folder
+        "output_folder": output_folder,
+        "minimal_paired_points": minimal_paired_points,
+        "maximal_error_threshold": maximal_error_threshold,
+        "ransac_iterations": ransac_iterations
     }
 )
 
@@ -62,16 +68,16 @@ def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
     model_global, inliers = ransac(
         (src_pts, dst_pts),
         AffineTransform,
-        min_samples=3,
-        residual_threshold=8.0,  # Un peu plus permissif pour la lame entière
-        max_trials=2000
+        min_samples=minimal_paired_points,
+        residual_threshold= maximal_error_threshold,
+        max_trials= ransac_iterations
     )
     if model_global is None or np.sum(inliers) < 4:
-        print("RANSAC échoué pour la registration globale")
+        print("RANSAC failed")
         return None, lowres_cd30_np
     num_inliers = np.sum(inliers)
     inlier_ratio = num_inliers / len(good_matches)
-    print(f"Registration globale réussie: {num_inliers}/{len(good_matches)} inliers (ratio: {inlier_ratio:.3f})")
+    print(f"Registration done: {num_inliers}/{len(good_matches)} inliers (ratio: {inlier_ratio:.3f})")
     return model_global
 
 def build_figure(lowres_hes_np, lowres_cd30_np, patient_id, model):
@@ -97,7 +103,7 @@ def build_figure(lowres_hes_np, lowres_cd30_np, patient_id, model):
     output_path = os.path.join(output_folder, f'{patient_id}_0_global_registration.png')
     plt.savefig(output_path, dpi=500, bbox_inches='tight')
     plt.close()
-    print(f"Visualisation sauvegardée: {output_path}")
+    print(f"Visualisation sauvegardée")
 
 
 def process_one_slide_pair_visualization(hes_path, cd30_path):
@@ -115,6 +121,8 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
     lowres_cd30_np = np.array(lowres_cd30)
 
     model = register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id)
+    if model is None:
+        return
     build_figure(lowres_hes_np, lowres_cd30_np, patient_id, model)
             
     slide_hes.close()

@@ -10,7 +10,7 @@ from skimage.transform import AffineTransform
 import warnings
 import wandb
 warnings.filterwarnings('ignore')
-from preprocessing.create_mask import compute_tissue_mask
+from create_mask import compute_tissue_mask
 from registration import register_whole_slide
 wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
 

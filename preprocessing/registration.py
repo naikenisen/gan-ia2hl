@@ -37,14 +37,30 @@ wandb.init(
     }
 )
 
+def color_traitement(image):
+    # Convertir en HSV
+    hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+    # Accentuer la saturation
+    h, s, v = cv2.split(hsv)
+    s = cv2.equalizeHist(s)
+    hsv_enhanced = cv2.merge([h, s, v])
+    # Revenir en RGB
+    rgb_enhanced = cv2.cvtColor(hsv_enhanced, cv2.COLOR_HSV2RGB)
+    # Normaliser l'histogramme sur chaque canal
+    for i in range(3):
+        rgb_enhanced[..., i] = cv2.equalizeHist(rgb_enhanced[..., i])
+    # Convertir en niveaux de gris
+    gray = cv2.cvtColor(rgb_enhanced, cv2.COLOR_RGB2GRAY)
+    return gray
+
 def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
     """
     Effectue une registration globale de la lame entière à basse résolution.
     Retourne la transformation globale et l'image CD30 alignée.
     """
     # Conversion en niveaux de gris
-    gray_hes = cv2.cvtColor(lowres_hes_np, cv2.COLOR_RGB2GRAY)
-    gray_cd30 = cv2.cvtColor(lowres_cd30_np, cv2.COLOR_RGB2GRAY)
+    gray_hes = color_traitement(lowres_hes_np)
+    gray_cd30 = color_traitement(lowres_cd30_np)
     # Détection AKAZE
     akaze = cv2.AKAZE_create()
     kp1, desc1 = akaze.detectAndCompute(gray_hes, None)

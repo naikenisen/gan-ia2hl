@@ -12,6 +12,7 @@ import wandb
 warnings.filterwarnings('ignore')
 from create_mask import compute_tissue_mask
 from registration import register_whole_slide
+import matplotlib.pyplot as plt
 wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
 # todo : enlever les régions et ne garder que les patches extraits
 
@@ -25,7 +26,6 @@ tissue_threshold = 0.60
 total_patches = 0
 processed_slides = 0
 failed_slides = 0
-total_patch_count = 0
 patients_to_process = ["AHL001", "AHL003", "AHL004",
                        "AHL006", "AHL007", "AHL011" ]
 
@@ -72,10 +72,36 @@ def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
     lowres_cd30_np = np.array(lowres_cd30)
     print(" Calcul du masque de tissu...")
     mask_hes = compute_tissue_mask(lowres_hes)
-
     transformation = register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id)
 
+    h, w = lowres_hes_np.shape[:2]
+    aligned_cd30_global = cv2.warpAffine(
+        lowres_cd30_np, 
+        model.params[:2], 
+        (w, h),
+        flags=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=(255, 255, 255)
+    )
+    fig, axes = plt.subplots(1, 3, figsize=(20, 7))
+    axes[0].imshow(lowres_hes_np)
+    axes[0].axis('off')
+    axes[1].imshow(lowres_cd30_np)
+    axes[1].axis('off')
+    axes[2].imshow(aligned_cd30_global)
+    axes[2].axis('off')
+    plt.suptitle(f'{patient_id}')
+    plt.tight_layout()
+    output_path = os.path.join(output_folder, f'{patient_id}_0_global_registration.png')
+    plt.savefig(output_path, dpi=500, bbox_inches='tight')
+    plt.close()
+    print(f"Visualisation sauvegardée")
+    
+    #stop code here
+    return 0
+
     patch_count = 0
+    total_patch_count = 0
     w0_hes, h0_hes = slide_hes.level_dimensions[0]
     w0_cd30, h0_cd30 = slide_cd30.level_dimensions[0]
     downsample_hes = int(slide_hes.level_downsamples[level])

@@ -19,8 +19,6 @@ input_folder = "/gold/data_feasibility"
 output_folder = "./visualizations_ORB"
 os.makedirs(output_folder, exist_ok=True)
 registration_metrics = defaultdict(lambda: defaultdict(dict))
-region_size = 12000
-overlap_percent = 0.10  # 20% de chevauchement entre les régions
 lowres_level = 2
 
 wandb.init(
@@ -28,13 +26,9 @@ wandb.init(
     name="akaze-registration-visualization",
     config={
         "feature_detector": "AKAZE",
-        "region_size": region_size,
-        "overlap_percent": overlap_percent,
         "lowres_level": lowres_level,
         "input_folder": input_folder,
-        "output_folder": output_folder,
-        "min_inliers": 20,
-        "spatial_coherence": True
+        "output_folder": output_folder
     }
 )
 

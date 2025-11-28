@@ -73,7 +73,7 @@ def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
     print(" Calcul du masque de tissu...")
     mask_hes = compute_tissue_mask(lowres_hes)
 
-    transformation = register_whole_slide(lowres_hes_np, lowres_cd30_np)
+    transformation = register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id)
 
     patch_count = 0
     w0_hes, h0_hes = slide_hes.level_dimensions[0]

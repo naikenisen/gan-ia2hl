@@ -11,31 +11,6 @@ import warnings
 import wandb
 import pandas as pd
 from collections import defaultdict
-warnings.filterwarnings('ignore')
-wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
-
-# Configuration
-input_folder = "/gold/data_feasibility"
-output_folder = "./visualization"
-os.makedirs(output_folder, exist_ok=True)
-registration_metrics = defaultdict(lambda: defaultdict(dict))
-lowres_level = 2
-minimal_paired_points = 3
-maximal_error_threshold = 8.0
-ransac_iterations = 2000
-
-wandb.init(
-    project="ia2hl-preprocessing",
-    name="global-registration",
-    config={
-        "lowres_level": lowres_level,
-        "input_folder": input_folder,
-        "output_folder": output_folder,
-        "minimal_paired_points": minimal_paired_points,
-        "maximal_error_threshold": maximal_error_threshold,
-        "ransac_iterations": ransac_iterations
-    }
-)
 
 def color_traitement(image):
     hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
@@ -140,35 +115,60 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
     slide_cd30.close()
 
 
-svs_files = [f for f in os.listdir(input_folder) if f.lower().endswith(".svs")]
-hes_files = [f for f in svs_files if f.endswith("_HES.svs")]
-cd30_files = [f for f in svs_files if f.endswith("_CD30.svs")]
-
-print(f"\nFichiers trouvés: {len(hes_files)} HES, {len(cd30_files)} CD30")
-
-# Créer les paires
-pairs = {}
-for hes_file in hes_files:
-    base_id = hes_file.replace("_HES.svs", "")
-    cd30_file = f"{base_id}_CD30.svs"
-    
-    if cd30_file in cd30_files:
-        pairs[base_id] = {
-            'hes': os.path.join(input_folder, hes_file),
-            'cd30': os.path.join(input_folder, cd30_file)
+if __name__ == "__main__":
+# Configuration
+    input_folder = "/gold/data_feasibility"
+    output_folder = "./visualization"
+    os.makedirs(output_folder, exist_ok=True)
+    registration_metrics = defaultdict(lambda: defaultdict(dict))
+    lowres_level = 2
+    minimal_paired_points = 3
+    maximal_error_threshold = 8.0
+    ransac_iterations = 2000
+    wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
+    warnings.filterwarnings('ignore')
+    wandb.init(
+        project="ia2hl-preprocessing",
+        name="global-registration",
+        config={
+            "lowres_level": lowres_level,
+            "input_folder": input_folder,
+            "output_folder": output_folder,
+            "minimal_paired_points": minimal_paired_points,
+            "maximal_error_threshold": maximal_error_threshold,
+            "ransac_iterations": ransac_iterations
         }
+    )
 
-print(f"{len(pairs)} paires disponibles")
+    svs_files = [f for f in os.listdir(input_folder) if f.lower().endswith(".svs")]
+    hes_files = [f for f in svs_files if f.endswith("_HES.svs")]
+    cd30_files = [f for f in svs_files if f.endswith("_CD30.svs")]
 
-total_patients = len(pairs)
-patients_with_regions = 0
-total_regions = 0
+    print(f"\nFichiers trouvés: {len(hes_files)} HES, {len(cd30_files)} CD30")
 
-print(f"Traitement de {total_patients} patients")
+    # Créer les paires
+    pairs = {}
+    for hes_file in hes_files:
+        base_id = hes_file.replace("_HES.svs", "")
+        cd30_file = f"{base_id}_CD30.svs"
+        
+        if cd30_file in cd30_files:
+            pairs[base_id] = {
+                'hes': os.path.join(input_folder, hes_file),
+                'cd30': os.path.join(input_folder, cd30_file)
+            }
 
-for idx, (patient_id, paths) in enumerate(pairs.items(), 1):
-    print(f"\n[Patient {idx}/{total_patients}] Traitement de: {patient_id}")
-    process_one_slide_pair_visualization(paths['hes'], paths['cd30'])
+    print(f"{len(pairs)} paires disponibles")
 
-print(f"TRAITEMENT TERMINÉ")
-wandb.finish()
+    total_patients = len(pairs)
+    patients_with_regions = 0
+    total_regions = 0
+
+    print(f"Traitement de {total_patients} patients")
+
+    for idx, (patient_id, paths) in enumerate(pairs.items(), 1):
+        print(f"\n[Patient {idx}/{total_patients}] Traitement de: {patient_id}")
+        process_one_slide_pair_visualization(paths['hes'], paths['cd30'])
+
+    print(f"TRAITEMENT TERMINÉ")
+    wandb.finish()

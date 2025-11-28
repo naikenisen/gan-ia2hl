@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 
-folder = "/gold/data_feasibility"
+folder = "/tmp/data/gold"
 svs_files = [f for f in os.listdir(folder) if f.lower().endswith(".svs")]
 
 level = 2
@@ -58,13 +58,11 @@ for idx, filename in enumerate(svs_files):
     # --- Plot low-res ---
     plt.subplot(rows, cols, base_row * cols + col + 1)
     plt.imshow(img)
-    plt.title(f"{filename}\nLow-res", fontsize=9)
     plt.axis("off")
 
     # --- Plot mask ---
     plt.subplot(rows, cols, (base_row + 1) * cols + col + 1)
     plt.imshow(mask, cmap="gray")
-    plt.title("Tissue mask", fontsize=9)
     plt.axis("off")
 
 plt.tight_layout()

@@ -77,7 +77,7 @@ def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
     h, w = lowres_hes_np.shape[:2]
     aligned_cd30_global = cv2.warpAffine(
         lowres_cd30_np, 
-        model.params[:2], 
+        transformation.params[:2], 
         (w, h),
         flags=cv2.INTER_LINEAR,
         borderMode=cv2.BORDER_CONSTANT,

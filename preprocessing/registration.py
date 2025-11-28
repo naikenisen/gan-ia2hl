@@ -23,9 +23,8 @@ lowres_level = 2
 
 wandb.init(
     project="ia2hl-preprocessing",
-    name="akaze-registration-visualization",
+    name="global-registration",
     config={
-        "feature_detector": "AKAZE",
         "lowres_level": lowres_level,
         "input_folder": input_folder,
         "output_folder": output_folder

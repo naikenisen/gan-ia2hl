@@ -21,7 +21,6 @@ wandb.init(
     config={
         "base_hande_path": BASE_HandE_PATH,
         "base_ihc_path": BASE_IHC_PATH,
-        "receptor": RECEPTOR,
         "buffer_size": BUFFER_SIZE,
         "batch_size": BATCH_SIZE,
         "img_width": IMG_WIDTH,

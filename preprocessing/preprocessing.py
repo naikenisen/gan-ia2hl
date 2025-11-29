@@ -49,8 +49,6 @@ def patch_has_tissue(x, y, mask, downsample):
     y_lr = y // downsample
     ps_lr = patch_size // downsample
     patch_mask = mask[y_lr:y_lr+ps_lr, x_lr:x_lr+ps_lr]
-    if patch_mask.size == 0:
-        return False
     tissue_ratio = np.mean(patch_mask > 0)
     return tissue_ratio >= tissue_threshold
 
@@ -107,8 +105,8 @@ def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
                 continue
             patch_cd30 = slide_cd30.read_region((x_cd30, y_cd30), 0, (patch_size, patch_size)).convert("RGB")
             patch_name = f"patch_x{x}_y{y}.jpg"
-            patch_hes.save(os.path.join(patient_hes_dir, patch_name), optimize=True)
-            patch_cd30.save(os.path.join(patient_cd30_dir, patch_name), optimize=True)
+            patch_hes.save(os.path.join(patient_hes_dir, patch_name), optimize=False)
+            patch_cd30.save(os.path.join(patient_cd30_dir, patch_name), optimize=False)
             patch_count += 1
             total_patch_count += 1
             print(f"{patch_count} paires de patches extraites")

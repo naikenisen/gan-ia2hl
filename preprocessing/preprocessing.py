@@ -72,7 +72,12 @@ def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
     lowres_cd30_np = np.array(lowres_cd30)
     print(" Calcul du masque de tissu...")
     mask_hes = compute_tissue_mask(lowres_hes)
-    transformation = register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id)
+    model = register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id)
+    if model is None:
+        print(f"[Patient {patient_id}] Modèle de registration nul, passage au patient suivant.")
+        slide_hes.close()
+        slide_cd30.close()
+        return
 
     patch_count = 0
     total_patch_count = 0
@@ -90,7 +95,7 @@ def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
             patch_hes = slide_hes.read_region((x, y), 0, (patch_size, patch_size)).convert("RGB")
             x_lr = x / downsample_hes
             y_lr = y / downsample_hes
-            transform_matrix = transformation.params[:2]
+            transform_matrix = model.params[:2]
             full_matrix = np.vstack([transform_matrix, [0, 0, 1]])
             inv_matrix = np.linalg.inv(full_matrix)
             point = np.array([x_lr, y_lr, 1])

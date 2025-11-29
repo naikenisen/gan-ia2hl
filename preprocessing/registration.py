@@ -11,6 +11,7 @@ import warnings
 import wandb
 import pandas as pd
 from collections import defaultdict
+import random
 
 def color_traitement(image):
     hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
@@ -23,11 +24,13 @@ def color_traitement(image):
     gray = cv2.cvtColor(rgb_enhanced, cv2.COLOR_RGB2GRAY)
     return gray
 
-def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
+def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id, seed=42):
     """
     Effectue une registration globale de la lame entière à basse résolution.
     Retourne la transformation globale et l'image CD30 alignée.
     """
+    random.seed(seed)
+    np.random.seed(seed)
     minimal_paired_points = 3
     maximal_error_threshold = 8.0
     ransac_iterations = 2000

@@ -28,9 +28,9 @@ def register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id):
     Effectue une registration globale de la lame entière à basse résolution.
     Retourne la transformation globale et l'image CD30 alignée.
     """
-    minimal_paired_points = 4
-    maximal_error_threshold = 6.0
-    ransac_iterations = 10000
+    minimal_paired_points = 3
+    maximal_error_threshold = 8.0
+    ransac_iterations = 2000
     # Conversion en niveaux de gris
     gray_hes = color_traitement(lowres_hes_np)
     gray_cd30 = color_traitement(lowres_cd30_np)

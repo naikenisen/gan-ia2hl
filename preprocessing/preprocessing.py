@@ -74,32 +74,6 @@ def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
     mask_hes = compute_tissue_mask(lowres_hes)
     transformation = register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id)
 
-    h, w = lowres_hes_np.shape[:2]
-    aligned_cd30_global = cv2.warpAffine(
-        lowres_cd30_np, 
-        transformation.params[:2], 
-        (w, h),
-        flags=cv2.INTER_LINEAR,
-        borderMode=cv2.BORDER_CONSTANT,
-        borderValue=(255, 255, 255)
-    )
-    fig, axes = plt.subplots(1, 3, figsize=(20, 7))
-    axes[0].imshow(lowres_hes_np)
-    axes[0].axis('off')
-    axes[1].imshow(lowres_cd30_np)
-    axes[1].axis('off')
-    axes[2].imshow(aligned_cd30_global)
-    axes[2].axis('off')
-    plt.suptitle(f'{patient_id}')
-    plt.tight_layout()
-    output_path = os.path.join(output_folder, f'{patient_id}_0_global_registration.png')
-    plt.savefig(output_path, dpi=500, bbox_inches='tight')
-    plt.close()
-    print(f"Visualisation sauvegardée")
-    
-    #stop code here
-    return 0
-
     patch_count = 0
     total_patch_count = 0
     w0_hes, h0_hes = slide_hes.level_dimensions[0]

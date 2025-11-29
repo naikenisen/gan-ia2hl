@@ -1,1 +1,0 @@
-La registration marche très bien lorsque la structure est un contour de l'image ou un motif, lorsque ce sont des cellules homogènes ça ne marche pas dutout, comment concentrer la registration sur les zones où cela fonctionne notammetn lorsque 

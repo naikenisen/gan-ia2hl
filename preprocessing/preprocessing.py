@@ -18,16 +18,15 @@ wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
 
 # Configuration
 input_folder = "/gold/data_feasibility"
-output_folder = "/silver/ube/patches"
+output_folder = "/silver/ube/extracted_patches"
 patch_size = 2000
 stride_patch = 1500
 level = 2
-tissue_threshold = 0.60
+tissue_threshold = 0.80
 total_patches = 0
 processed_slides = 0
 failed_slides = 0
-patients_to_process = ["AHL001", "AHL003", "AHL004",
-                       "AHL006", "AHL007", "AHL011" ]
+patients_to_process = ["AHL004"]
 
 
 hes_dir = os.path.join(output_folder, "HES")

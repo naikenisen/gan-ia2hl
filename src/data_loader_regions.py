@@ -3,16 +3,14 @@ from PIL import Image
 import torch
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
-from src.config import BASE_HandE_PATH, BASE_IHC_PATH, RECEPTOR, IMG_HEIGHT, IMG_WIDTH, BATCH_SIZE
+from src.config import BASE_HandE_PATH, BASE_IHC_PATH, IMG_HEIGHT, IMG_WIDTH, BATCH_SIZE
                 
 # fonction pour récupérer les chemins des images HandE et IHC
-def get_image_paths(hande_base, ihc_base, receptor):
+def get_image_paths(hande_base, ihc_base):
     hande_paths, ihc_paths = [], []
-    receptor_hande_dir = os.path.join(hande_base, receptor)
-    receptor_ihc_dir = os.path.join(ihc_base, receptor)
-    for patient_dir in os.listdir(receptor_hande_dir):
-        patient_hande_path = os.path.join(receptor_hande_dir, patient_dir)
-        patient_ihc_path = os.path.join(receptor_ihc_dir, patient_dir)
+    for patient_dir in os.listdir(hande_base):
+        patient_hande_path = os.path.join(hande_base, patient_dir)
+        patient_ihc_path = os.path.join(ihc_base, patient_dir)
         if not os.path.isdir(patient_hande_path): continue
         for subregion_dir in os.listdir(patient_hande_path):
             subregion_hande_path = os.path.join(patient_hande_path, subregion_dir)
@@ -45,7 +43,7 @@ class IHCDataset(Dataset):
         ihc_img = self.transform(ihc_img)
         return hande_img, ihc_img
 
-hande_files, ihc_files = get_image_paths(BASE_HandE_PATH, BASE_IHC_PATH, RECEPTOR)
+hande_files, ihc_files = get_image_paths(BASE_HandE_PATH, BASE_IHC_PATH)
 train_size = int(0.8 * len(hande_files))
 train_hande, test_hande = hande_files[:train_size], hande_files[train_size:]
 train_ihc, test_ihc = ihc_files[:train_size], ihc_files[train_size:]

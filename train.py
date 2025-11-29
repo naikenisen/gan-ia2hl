@@ -10,7 +10,7 @@ from PIL import Image
 import wandb
 import torch.nn as nn
 from src.models import Generator, Discriminator
-from src.data_loader import train_loader, test_loader
+from src.data_loader_regions import train_loader, test_loader
 
 wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
 import wandb

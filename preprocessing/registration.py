@@ -110,9 +110,12 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
     lowres_hes_np = np.array(lowres_hes)
     lowres_cd30_np = np.array(lowres_cd30)
     model = register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id)
-
+    if model is None:
+        print(f"[Patient {patient_id}] Modèle de registration nul, passage au patient suivant.")
+        slide_hes.close()
+        slide_cd30.close()
+        return
     build_figure(lowres_hes_np, lowres_cd30_np, patient_id, model)
-            
     slide_hes.close()
     slide_cd30.close()
 

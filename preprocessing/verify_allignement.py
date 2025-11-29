@@ -96,7 +96,7 @@ for i, (coords, hes_path, cd30_path) in enumerate(selected_pairs[:num_pairs]):
 
 plt.suptitle(f'Planche de {num_pairs} paires HES/CD30 (1 par région)', fontsize=18, fontweight='bold')
 plt.tight_layout(rect=[0, 0.03, 1, 0.97])
-output_path = "planche_paires_regions.png"
+output_path = "results/planche_paires_regions.png"
 plt.savefig(output_path, dpi=200)
 plt.close()
 print(f"Planche enregistrée sous {output_path}")

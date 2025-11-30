@@ -9,4 +9,4 @@ IMG_HEIGHT = 256
 EPOCHS = 100
 LAMBDA = 100
 MODEL_SCALE = 0.75
-CHECKPOINT_DIR = '/coding/ia2hl/checkpoints'
+CHECKPOINT_DIR = '/work/imvia/in156281/ia2hl/checkpoints'

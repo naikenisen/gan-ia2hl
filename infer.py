@@ -12,7 +12,7 @@ from src.config import device, MODEL_SCALE, CHECKPOINT_DIR, IMG_HEIGHT, IMG_WIDT
 from torchvision import transforms
 from src.models import Generator
 
-hande_path = 'inference/patch_x3000_y0_hes.jpg'
+hande_path = 'inference/patch_x6000_y9000.jpg'
 
 os.makedirs('inference', exist_ok=True)
 generator = Generator(MODEL_SCALE).to(device)

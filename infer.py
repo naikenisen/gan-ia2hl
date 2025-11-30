@@ -12,7 +12,7 @@ from src.config import device, MODEL_SCALE, CHECKPOINT_DIR, IMG_HEIGHT, IMG_WIDT
 from torchvision import transforms
 from src.models import Generator
 
-hande_path = 'inference/hes_region_3_x0_y0.jpg'
+hande_path = 'inference/patch_x3000_y0_hes.jpg'
 
 os.makedirs('inference', exist_ok=True)
 generator = Generator(MODEL_SCALE).to(device)
@@ -60,6 +60,6 @@ with torch.no_grad(): # disable gradient tracking for evaluation
         plt.title("Generated (IHC) Image")
         plt.axis("off")
         
-        output_path = f'inference/region_003_x0_y0_inference.png'
+        output_path = f'inference/inference.png'
         plt.savefig(output_path, bbox_inches='tight', dpi=500)
         plt.close()

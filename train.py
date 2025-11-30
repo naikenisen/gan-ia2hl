@@ -10,18 +10,17 @@ from PIL import Image
 import wandb
 import torch.nn as nn
 from src.models import Generator, Discriminator
-from src.data_loader import train_loader, test_loader
+from src.data_loader_regions import train_loader, test_loader
 
 wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
 import wandb
 
 
 wandb.init(
-    project="ihc_image_translation_gan",
+    project="ia2hl-gan",
     config={
         "base_hande_path": BASE_HandE_PATH,
         "base_ihc_path": BASE_IHC_PATH,
-        "receptor": RECEPTOR,
         "buffer_size": BUFFER_SIZE,
         "batch_size": BATCH_SIZE,
         "img_width": IMG_WIDTH,

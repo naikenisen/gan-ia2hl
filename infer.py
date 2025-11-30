@@ -12,11 +12,11 @@ from src.config import device, MODEL_SCALE, CHECKPOINT_DIR, IMG_HEIGHT, IMG_WIDT
 from torchvision import transforms
 from src.models import Generator
 
-hande_path = 'test/HE_KI67.jpg'
+hande_path = 'inference/hes_region_3_x0_y0.jpg'
 
-os.makedirs('results', exist_ok=True)
+os.makedirs('inference', exist_ok=True)
 generator = Generator(MODEL_SCALE).to(device)
-checkpoint_path = "checkpoints/KI67.pth"
+checkpoint_path = "checkpoints/checkpoint.pth"
 checkpoint = torch.load(checkpoint_path, map_location=device)
 generator.load_state_dict(checkpoint['generator'])
 
@@ -60,6 +60,6 @@ with torch.no_grad(): # disable gradient tracking for evaluation
         plt.title("Generated (IHC) Image")
         plt.axis("off")
         
-        output_path = f'results/inference_KI67.png'
+        output_path = f'inference/region_003_x0_y0_inference.png'
         plt.savefig(output_path, bbox_inches='tight', dpi=500)
         plt.close()

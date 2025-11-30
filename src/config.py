@@ -1,7 +1,7 @@
 import torch
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-BASE_HandE_PATH = '/silver/ube/data_feasibility/HES'
-BASE_IHC_PATH = '/silver/ube/data_feasibility/CD30'
+BASE_HandE_PATH = '/work/imvia/in156281/ia2hl_data/HES'
+BASE_IHC_PATH = '/work/imvia/in156281/ia2hl_data/CD30'
 BUFFER_SIZE = 400
 BATCH_SIZE = 4
 IMG_WIDTH = 256

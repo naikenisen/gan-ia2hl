@@ -17,7 +17,7 @@ import wandb
 
 
 wandb.init(
-    project="ihc_image_translation_gan",
+    project="ia2hl-gan",
     config={
         "base_hande_path": BASE_HandE_PATH,
         "base_ihc_path": BASE_IHC_PATH,

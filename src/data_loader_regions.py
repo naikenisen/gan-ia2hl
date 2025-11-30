@@ -8,18 +8,15 @@ from src.config import BASE_HandE_PATH, BASE_IHC_PATH, IMG_HEIGHT, IMG_WIDTH, BA
 # fonction pour récupérer les chemins des images HandE et IHC
 def get_image_paths(hande_base, ihc_base):
     hande_paths, ihc_paths = [], []
-    for patient_dir in os.listdir(hande_base):
-        patient_hande_path = os.path.join(hande_base, patient_dir)
-        patient_ihc_path = os.path.join(ihc_base, patient_dir)
-        if not os.path.isdir(patient_hande_path): continue
-        for subregion_dir in os.listdir(patient_hande_path):
-            subregion_hande_path = os.path.join(patient_hande_path, subregion_dir)
-            subregion_ihc_path = os.path.join(patient_ihc_path, subregion_dir)
-            if not os.path.isdir(subregion_hande_path): continue
-            for img_name in os.listdir(subregion_hande_path):
-                if img_name.endswith('.jpg'):
-                    hande_paths.append(os.path.join(subregion_hande_path, img_name))
-                    ihc_paths.append(os.path.join(subregion_ihc_path, img_name))
+    for region_dir in os.listdir(hande_base):
+        region_hande_path = os.path.join(hande_base, region_dir)
+        region_ihc_path = os.path.join(ihc_base, region_dir)
+        if not os.path.isdir(region_hande_path):
+            continue
+        for img_name in os.listdir(region_hande_path):
+            if img_name.endswith('.jpg'):
+                hande_paths.append(os.path.join(region_hande_path, img_name))
+                ihc_paths.append(os.path.join(region_ihc_path, img_name))
     return hande_paths, ihc_paths
 
 # fonction pour prétraiter les images et créer un Dataset personnalisé

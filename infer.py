@@ -48,18 +48,4 @@ with torch.no_grad(): # disable gradient tracking for evaluation
         generated_img_hwc = np.transpose(generated_img_denorm, (1, 2, 0))
         
         # Visualize the results
-        plt.figure(figsize=(18, 7))
-        
-        plt.subplot(1, 2, 1)
-        plt.imshow(np.transpose(hande_img_denorm, (1, 2, 0)))
-        plt.title("Input (HandE) Image")
-        plt.axis("off")
-        
-        plt.subplot(1, 2, 2)
-        plt.imshow(generated_img_hwc)
-        plt.title("Generated (IHC) Image")
-        plt.axis("off")
-        
-        output_path = f'inference/inference.png'
-        plt.savefig(output_path, bbox_inches='tight', dpi=500)
-        plt.close()
+        plt.imsave('inference/inference.png', generated_img_hwc, format='png', cmap=None)

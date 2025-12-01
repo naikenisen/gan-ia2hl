@@ -10,3 +10,4 @@ EPOCHS = 100
 LAMBDA = 100
 MODEL_SCALE = 1
 CHECKPOINT_DIR = 'checkpoints'
+LR = 2e-4

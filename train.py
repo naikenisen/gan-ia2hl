@@ -29,6 +29,7 @@ wandb.init(
         "lambda_l1": LAMBDA,
         "model_scale": MODEL_SCALE,
         "checkpoint_dir": CHECKPOINT_DIR,
+        "learning_rate": LR,
         "device": str(device),
     }
 )
@@ -44,8 +45,8 @@ discriminator = Discriminator(MODEL_SCALE).to(device)
 criterion_bce = nn.BCEWithLogitsLoss()
 criterion_l1 = nn.L1Loss()
 # les optimizers prennent les paramètres des deux modèles qu'ils doivent optimiser 
-generator_optimizer = optim.Adam(generator.parameters(), lr=2e-4, betas=(0.5, 0.999))
-discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=2e-4, betas=(0.5, 0.999))
+generator_optimizer = optim.Adam(generator.parameters(), lr=LR, betas=(0.5, 0.999))
+discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=LR, betas=(0.5, 0.999))
 
 
 epoch_counter = 1

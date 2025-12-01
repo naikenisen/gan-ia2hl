@@ -13,7 +13,7 @@ from src import data_loader_regions
 
 os.makedirs('results', exist_ok=True)
 generator = Generator(MODEL_SCALE).to(device)
-checkpoint_path = os.path.join(CHECKPOINT_DIR, "checkpoint.pth")
+checkpoint_path = os.path.join(CHECKPOINT_DIR, "checkpoint_old.pth")
 checkpoint = torch.load(checkpoint_path, map_location=device)
 generator.load_state_dict(checkpoint['generator'])
 

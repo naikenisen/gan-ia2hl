@@ -17,7 +17,7 @@ checkpoint_path = os.path.join(CHECKPOINT_DIR, "checkpoint_old.pth")
 checkpoint = torch.load(checkpoint_path, map_location=device)
 generator.load_state_dict(checkpoint['generator'])
 
-def evaluate_model(model, test_loader, device, num_samples=20):
+def evaluate_model(model, train_loader_loader, device, num_samples=20):
     print(f"Evaluating on {num_samples} samples")
     
     metrics = {
@@ -29,7 +29,7 @@ def evaluate_model(model, test_loader, device, num_samples=20):
     model.eval()
     
     with torch.no_grad(): # disable gradient tracking for evaluation
-        for idx, (hande_img, ihc_img) in enumerate(test_loader):
+        for idx, (hande_img, ihc_img) in enumerate(train_loader_loader):
             if idx >= num_samples:
                 break
             
@@ -76,7 +76,7 @@ def evaluate_model(model, test_loader, device, num_samples=20):
 # Run evaluation
 if __name__ == "__main__":
     print("STARTING EVALUATION")
-    evaluation_df = evaluate_model(generator, data_loader_regions.test_loader, device, num_samples=20)
+    evaluation_df = evaluate_model(generator, data_loader_regions.train_loader_loader, device, num_samples=20)
     print(evaluation_df.describe())
     metrics_path = 'results/evaluation_metrics.csv'
     evaluation_df.to_csv(metrics_path, index=False)

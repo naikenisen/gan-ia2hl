@@ -11,4 +11,4 @@ LAMBDA = 50
 MODEL_SCALE = 1
 CHECKPOINT_DIR = 'checkpoints'
 LRG = 2e-4
-LRD = 1e-4
+LRD = 2e-4

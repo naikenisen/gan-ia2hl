@@ -29,7 +29,8 @@ wandb.init(
         "lambda_l1": LAMBDA,
         "model_scale": MODEL_SCALE,
         "checkpoint_dir": CHECKPOINT_DIR,
-        "learning_rate": LR,
+        "learning_rate_generator": LRG,
+        "learning_rate_discriminator": LRD,
         "device": str(device),
     }
 )

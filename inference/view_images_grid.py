@@ -3,9 +3,9 @@ import matplotlib.image as mpimg
 import numpy as np
 
 # Charger les images
-img1 = mpimg.imread('hes.jpg')
-img2 = mpimg.imread('cd30.jpg')
-img3 = mpimg.imread('inference.png')
+img1 = mpimg.imread('inference/hes.jpg')
+img2 = mpimg.imread('inference/cd30.jpg')
+img3 = mpimg.imread('inference/inference.png')
 
 # Créer la figure avec 3 sous-plots côte à côte
 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
@@ -67,4 +67,4 @@ for idx, ax in enumerate(axes):
 plt.tight_layout(pad=0.5)
 
 # Afficher la figure
-plt.show()
+plt.savefig('inference/view_images_grid.png', dpi=300)

@@ -45,8 +45,8 @@ discriminator = Discriminator(MODEL_SCALE).to(device)
 criterion_bce = nn.BCEWithLogitsLoss()
 criterion_l1 = nn.L1Loss()
 # les optimizers prennent les paramètres des deux modèles qu'ils doivent optimiser 
-generator_optimizer = optim.Adam(generator.parameters(), lr=LR, betas=(0.5, 0.999))
-discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=LR, betas=(0.5, 0.999))
+generator_optimizer = optim.Adam(generator.parameters(), lr=LRG, betas=(0.5, 0.999))
+discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=LRD, betas=(0.5, 0.999))
 
 
 epoch_counter = 1

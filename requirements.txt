@@ -11,3 +11,6 @@ wandb
 opencv-python
 opencv-contrib-python
 openslide-python
+lpips
+pytorch-fid
+scipy

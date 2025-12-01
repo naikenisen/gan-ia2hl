@@ -1,3 +1,14 @@
+import os
+import tempfile
+
+# Configure cache directories BEFORE importing torch and matplotlib
+# This prevents permission errors when downloading pretrained models
+temp_dir = tempfile.gettempdir()
+os.environ['TORCH_HOME'] = os.path.join(temp_dir, 'torch_cache')
+os.environ['MPLCONFIGDIR'] = os.path.join(temp_dir, 'matplotlib_cache')
+os.makedirs(os.environ['TORCH_HOME'], exist_ok=True)
+os.makedirs(os.environ['MPLCONFIGDIR'], exist_ok=True)
+
 import torch
 import pandas as pd
 import seaborn as sns
@@ -5,7 +16,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
-import os
 import sys
 import lpips
 import scipy.linalg

@@ -2,3 +2,7 @@
 figures.pdf
 /ia2hl_data
 /checkpoints
+result.out
+results/
+src/__pycache__/
+wandb/

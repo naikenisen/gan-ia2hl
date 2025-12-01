@@ -146,7 +146,8 @@ def evaluate_model(model, train_loader, device, num_samples=20):
             mae = np.mean(np.abs(ihc_img_np - generated_img_np))
             
             # Calculate LPIPS (expects normalized tensors in [-1, 1] range)
-            lpips_value = lpips_model(ihc_img, generated_img).item()
+            # Take mean in case of batch, then convert to scalar
+            lpips_value = lpips_model(ihc_img, generated_img).mean().item()
             
             # Calculate JSD
             jsd_value = calculate_jsd(ihc_img_denorm, generated_img_denorm)

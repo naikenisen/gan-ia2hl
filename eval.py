@@ -55,10 +55,11 @@ def calculate_jsd(img1, img2, bins=256):
 def calculate_fid_from_images(real_images, generated_images, device):
     """Calculate FID score using InceptionV3 features"""
     from torchvision.models import inception_v3
-    from torch.nn.functional import adaptive_avg_pool2d
+    from torch.nn import functional as F
     
-    # Load InceptionV3 model
+    # Load InceptionV3 model in feature extraction mode
     inception_model = inception_v3(pretrained=True, transform_input=False).to(device)
+    inception_model.fc = torch.nn.Identity()  # Remove final classification layer
     inception_model.eval()
     
     def get_features(images):
@@ -66,12 +67,12 @@ def calculate_fid_from_images(real_images, generated_images, device):
         with torch.no_grad():
             for img in images:
                 # Resize to 299x299 for InceptionV3
-                img_resized = torch.nn.functional.interpolate(
+                img_resized = F.interpolate(
                     img.unsqueeze(0), size=(299, 299), mode='bilinear', align_corners=False
                 )
                 # InceptionV3 expects images normalized to [-1, 1] which we already have
                 feat = inception_model(img_resized)
-                feat = adaptive_avg_pool2d(feat, output_size=(1, 1))
+                # feat is now a 1D tensor of features from the last pooling layer
                 features.append(feat.squeeze().cpu().numpy())
         return np.array(features)
     

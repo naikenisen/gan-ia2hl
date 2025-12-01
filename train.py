@@ -173,7 +173,7 @@ def fit(train_loader, test_loader, start_epoch, epochs):
                 'discriminator_optimizer': discriminator_optimizer.state_dict(),
                 'val_l1_loss': best_val_loss,
             }, best_model_path)
-            print(f"✓ New best model saved! Val L1 Loss: {best_val_loss:.4f} (epoch {epoch})")
+            print(f"New best model saved! Val L1 Loss: {best_val_loss:.4f} (epoch {epoch})")
             wandb.save(best_model_path)
 
         print(f"Time taken for epoch {epoch} is {time.time()-start:.2f} sec\n")

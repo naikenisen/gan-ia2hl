@@ -13,7 +13,6 @@ from src.models import Generator, Discriminator
 from src.data_loader_regions import train_loader, test_loader
 
 wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
-import wandb
 
 
 wandb.init(
@@ -53,18 +52,6 @@ discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=LRD, betas=(
 epoch_counter = 1
 checkpoint_path = os.path.join(CHECKPOINT_DIR, "checkpoint.pth")
 
-# Restore from the latest checkpoint if it exists
-if os.path.exists(checkpoint_path):
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    generator.load_state_dict(checkpoint['generator'])
-    discriminator.load_state_dict(checkpoint['discriminator'])
-    generator_optimizer.load_state_dict(checkpoint['generator_optimizer'])
-    discriminator_optimizer.load_state_dict(checkpoint['discriminator_optimizer'])
-    epoch_counter = checkpoint['epoch'] + 1
-    print(f"Restored from checkpoint. Resuming at epoch {epoch_counter}.")
-else:
-    print("Initializing from scratch. Starting at epoch 1.")
-
 # fonction pour calculer la loss du discriminateur
 def discriminator_loss(disc_real_output, disc_generated_output):
     real_loss = criterion_bce(disc_real_output, torch.ones_like(disc_real_output))
@@ -76,7 +63,6 @@ def generator_loss(disc_generated_output, gen_output, target):
     l1_loss = criterion_l1(gen_output, target)
     return gan_loss + (LAMBDA * l1_loss), l1_loss
 
-# --- 7. Training Step ---
 def train_step(input_image, target):
     # ajout des data sur le GPU
     input_image = input_image.to(device)

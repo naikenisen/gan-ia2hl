@@ -16,7 +16,7 @@ hande_path = 'inference/hes.jpg'
 
 os.makedirs('inference', exist_ok=True)
 generator = Generator(MODEL_SCALE).to(device)
-checkpoint_path = "checkpoints/checkpoint_2L.pth"
+checkpoint_path = "checkpoints/best_model.pth"
 checkpoint = torch.load(checkpoint_path, map_location=device)
 generator.load_state_dict(checkpoint['generator'])
 

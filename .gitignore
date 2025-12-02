@@ -1,7 +1,7 @@
 /preprocessing_results
 figures.pdf
 /ia2hl_data
-/checkpoints
+/best_models
 result.out
 results/
 src/__pycache__/

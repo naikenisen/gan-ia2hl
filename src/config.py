@@ -9,6 +9,6 @@ IMG_HEIGHT = 1024
 EPOCHS = 100
 LAMBDA = 100
 MODEL_SCALE = 1
-CHECKPOINT_DIR = 'checkpoints'
+CHECKPOINT_DIR = 'best_models'
 LRG = 2e-4
 LRD = 2e-4

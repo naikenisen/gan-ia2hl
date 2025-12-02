@@ -3,8 +3,6 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
-from skimage.metrics import structural_similarity as ssim
-from skimage.metrics import peak_signal_noise_ratio as psnr
 import os
 import sys
 from PIL import Image

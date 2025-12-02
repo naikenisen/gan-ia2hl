@@ -13,11 +13,13 @@
 Malgré la curabilité pour 80% des patients atteints de lymphome de Hodgkin (LH) classique, il est actuellement impossible de prédire de façon fiable et au diagnostic les profils de réponse et de toxicité aux stratégies de traitement actuelles. Ce projet IA2HL a pour but de répondre à ce besoin médical primordial. En effet ce projet novateur vise à identifier, dès le diagnostic, via l'analyse par intelligence artificielle (IA) des lames de biopsies, les patients à risque de rechute afin qu'ils puissent bénéficier le plus rapidement possible d'une personnalisation de leur prise en charge. C'est un projet multidisciplinaire (hématologie, anatomopathologie et techniques d'IA) impliquant plusieurs équipes et qui s'appuie sur une large base de données clinicobiologiques de 850 patients atteints d'un LH (essai AHL2011, dont le CHU de Dijon est promoteur).
 
 ## Objectifs du projet
-Objectifs cliniques : Utiliser une méthode de stratification qui pourrait aider à identifier :
+Objectifs cliniques : Utiliser une méthode de stratification qui pourrait aider à  :
 
-1. Objectif I : des patients réfractaires à une polychimiothérapie standard (BEACOPP, ABVD) pour une orientation le plus rapidement possible vers des stratégies intégrant de nouvelles molécules.
+1. Objectif I (CLAM): identifier des patients réfractaires à une polychimiothérapie standard (BEACOPP, ABVD) pour une orientation le plus rapidement possible vers des stratégies intégrant de nouvelles molécules.
 
-2. Objectif II : des associations/corrélations entre les profils de patients mis en évidence par l'IA, et les données d'imagerie TEP et biologiques (ADN tumoral circulant) déjà générées et disponibles pour les mêmes patients.
+2. Objectif II (MODELE MULTIMODAL INTEGRATIF): identifier des associations/corrélations entre les profils de patients mis en évidence par l'IA, et les données d'imagerie TEP et biologiques (ADN tumoral circulant) déjà générées et disponibles pour les mêmes patients.
+
+3. Objectif III : (GAN) construire des IHC synthétiques à partir des lames H&E.
 
 ## Lien vers le dépôt GitHub de CLAM:
 https://github.com/mahmoodlab/CLAM

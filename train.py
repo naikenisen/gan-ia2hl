@@ -51,13 +51,14 @@ discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=LRD, betas=(
 
 epoch_counter = 1
 best_model_path = os.path.join(CHECKPOINT_DIR, "best_model.pth")
+last_model_path = os.path.join(CHECKPOINT_DIR, "last_model.pth")
 best_val_loss = float('inf')
 
 # fonction pour calculer la loss du discriminateur
 def discriminator_loss(disc_real_output, disc_generated_output):
     real_loss = criterion_bce(disc_real_output, torch.ones_like(disc_real_output))
     generated_loss = criterion_bce(disc_generated_output, torch.zeros_like(disc_generated_output))
-    total_loss = (real_loss + generated_loss) / 2
+    total_loss = (real_loss + generated_loss) / 2 # TODO essayer de voir avant et après division par 2
     return total_loss
 # fonction pour calculer la loss du générateur
 def generator_loss(disc_generated_output, gen_output, target):
@@ -213,6 +214,19 @@ def fit(train_loader, test_loader, start_epoch, epochs):
             }, best_model_path)
             print(f"New best model saved! Val L1 Loss: {best_val_loss:.4f} (epoch {epoch})")
             wandb.save(best_model_path)
+        
+        # Sauvegarder le dernier modèle à chaque époque
+        os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+        torch.save({
+            'epoch': epoch,
+            'generator': generator.state_dict(),
+            'discriminator': discriminator.state_dict(),
+            'generator_optimizer': generator_optimizer.state_dict(),
+            'discriminator_optimizer': discriminator_optimizer.state_dict(),
+            'val_l1_loss': val_l1_loss,
+            'best_val_l1_loss': best_val_loss,
+        }, last_model_path)
+        print(f"Last model saved (epoch {epoch})")
 
         print(f"Time taken for epoch {epoch} is {time.time()-start:.2f} sec\n")
         wandb.log({"epoch_time": time.time()-start})

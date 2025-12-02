@@ -14,19 +14,21 @@ Malgré la curabilité pour 80% des patients atteints de lymphome de Hodgkin (LH
 
 ## Objectifs du projet
 Objectifs cliniques : Utiliser une méthode de stratification qui pourrait aider à identifier :
-    1. Objectif I : des patients réfractaires à une polychimiothérapie standard (BEACOPP, ABVD) pour une orientation le plus rapidement possible vers des stratégies intégrant de nouvelles molécules.
-    2. Objectif II : des associations/corrélations entre les profils de patients mis en évidence par l'IA, et les données d'imagerie TEP et biologiques (ADN tumoral circulant) déjà générées et disponibles pour les mêmes patients.
 
-Lien vers le dépôt GitHub de CLAM:
+1. Objectif I : des patients réfractaires à une polychimiothérapie standard (BEACOPP, ABVD) pour une orientation le plus rapidement possible vers des stratégies intégrant de nouvelles molécules.
+
+2. Objectif II : des associations/corrélations entre les profils de patients mis en évidence par l'IA, et les données d'imagerie TEP et biologiques (ADN tumoral circulant) déjà générées et disponibles pour les mêmes patients.
+
+## Lien vers le dépôt GitHub de CLAM:
 https://github.com/mahmoodlab/CLAM
 
-Article de référence pour CLAM:
+## Article de référence pour CLAM:
 Lu, M. Y., Williamson, D. F. K., Chen, T. Y., Chen, R. J., Barbieri, M., & Mahmood, F. (2021). Data-efficient and weakly supervised computational pathology on whole-slide images. Nature biomedical engineering, 5(6), 555–570. https://doi.org/10.1038/s41551-020-00682-w
 
-Lien vers le dépot kaggle du GAN:
+## Lien vers le dépot kaggle du GAN:
 https://www.kaggle.com/code/nibirs/ihc4bc
 
-Article de référence pour GAN:
+## Article de référence pour GAN:
 Klöckner, P., Teixeira, J., Montezuma, D., Fraga, J., Horlings, H. M., Cardoso, J. S., & Oliveira, S. P. (2025). H&E to IHC virtual staining methods in breast cancer: an overview and benchmarking. NPJ digital medicine, 8(1), 384. https://doi.org/10.1038/s41746-025-01741-9
 
 ## Instructions pour le CCUB

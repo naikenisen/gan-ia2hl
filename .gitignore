@@ -6,3 +6,4 @@ result.out
 results/
 src/__pycache__/
 wandb/
+/inference

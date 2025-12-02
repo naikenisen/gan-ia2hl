@@ -51,8 +51,8 @@ git status
 module load python
 python3 -m venv venv
 source venv/bin/activate
-pip3 install --prefix=/work/imvia/in156281/ihc4bc/venv -r requirements.txt
-export PYTHONPATH=/work/imvia/in156281/ihc4bc/venv/lib/python3.9/site-packages:$PYTHONPATH
+pip3 install --prefix=/work/imvia/in156281/ia2hl/venv -r requirements.txt
+export PYTHONPATH=/work/imvia/in156281/ia2hl/venv/lib/python3.9/site-packages:$PYTHONPATH
 pip3 list
 ```
 ### Alias 'venv'

@@ -14,7 +14,6 @@ from src.data_loader_regions import train_loader, test_loader
 
 wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
 
-
 wandb.init(
     project="ia2hl-gan",
     config={
@@ -34,13 +33,11 @@ wandb.init(
     }
 )
 
-
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # ajout des modèles sur le GPU
 generator = Generator(MODEL_SCALE).to(device)
 discriminator = Discriminator(MODEL_SCALE).to(device)
-
 # défnintion des fonctions de loss en utilisant le module nn
 criterion_bce = nn.BCEWithLogitsLoss()
 criterion_l1 = nn.L1Loss()
@@ -70,7 +67,6 @@ def train_step(input_image, target):
     # ajout des data sur le GPU
     input_image = input_image.to(device)
     target = target.to(device)
-
     # Train Discriminator
     discriminator_optimizer.zero_grad()
     gen_output = generator(input_image) # générer une image IHC à partir de l'image HandE
@@ -79,7 +75,6 @@ def train_step(input_image, target):
     disc_loss = discriminator_loss(disc_real_output, disc_generated_output) # calcul de la loss du discriminateur
     disc_loss.backward() # backpropagation sur la loss du discriminateur
     discriminator_optimizer.step() # mise à jour des poids du discriminateur (gradient descent)
-    
     # Train Generator
     generator_optimizer.zero_grad()
     gen_output = generator(input_image) # générer une image IHC à partir de l'image HandE
@@ -93,24 +88,16 @@ def train_step(input_image, target):
 def validate(test_loader):
     generator.eval()
     discriminator.eval()
-    
     total_l1_loss = 0
     total_disc_loss = 0
     num_batches = 0
-    
     with torch.no_grad():
         for input_image, target in test_loader:
             input_image = input_image.to(device)
             target = target.to(device)
-            
-            # Génération d'image
-            gen_output = generator(input_image)
-            
-            # Calculer uniquement la L1 loss (reconstruction quality)
-            l1_loss = criterion_l1(gen_output, target)
-            
-            # Calculer la loss du discriminateur (optionnel mais informatif)
-            disc_real_output = discriminator(input_image, target)
+            gen_output = generator(input_image) # Génération d'image
+            l1_loss = criterion_l1(gen_output, target) # Calculer la L1 loss
+            disc_real_output = discriminator(input_image, target) # Calculer la loss du discriminateur
             disc_generated_output = discriminator(input_image, gen_output)
             disc_loss = discriminator_loss(disc_real_output, disc_generated_output)
             

@@ -89,7 +89,6 @@ def validate(test_loader):
     generator.eval()
     discriminator.eval()
     total_l1_loss = 0
-    total_disc_loss = 0
     num_batches = 0
     with torch.no_grad():
         for input_image, target in test_loader:
@@ -97,18 +96,10 @@ def validate(test_loader):
             target = target.to(device)
             gen_output = generator(input_image) # Génération d'image
             l1_loss = criterion_l1(gen_output, target) # Calculer la L1 loss
-            disc_real_output = discriminator(input_image, target) # Calculer la loss du discriminateur
-            disc_generated_output = discriminator(input_image, gen_output)
-            disc_loss = discriminator_loss(disc_real_output, disc_generated_output)
-            
             total_l1_loss += l1_loss.item()
-            total_disc_loss += disc_loss.item()
             num_batches += 1
-    
     avg_l1_loss = total_l1_loss / num_batches
-    avg_disc_loss = total_disc_loss / num_batches
-    
-    return avg_l1_loss, avg_disc_loss
+    return avg_l1_loss
 
 # Training Loop
 def fit(train_loader, test_loader, start_epoch, epochs):
@@ -119,7 +110,6 @@ def fit(train_loader, test_loader, start_epoch, epochs):
     train_gen_losses = []
     train_l1_losses = []
     val_l1_losses = []
-    val_disc_losses = []
     epochs_list = []
     
     # boule sur les époques pour l'entrainement
@@ -154,39 +144,19 @@ def fit(train_loader, test_loader, start_epoch, epochs):
                 'gen_total': f'{gen_total_loss:.4f}',
                 'l1_loss': f'{gen_l1_loss:.4f}'
             })
-            wandb.log({
-                'disc_loss': disc_loss,
-                'gen_total_loss': gen_total_loss,
-                'gen_l1_loss': gen_l1_loss
-            })
-        
+            
         # Calculer les moyennes de l'époque
-        avg_train_disc_loss = epoch_disc_loss / num_train_batches
-        avg_train_gen_loss = epoch_gen_loss / num_train_batches
         avg_train_l1_loss = epoch_l1_loss / num_train_batches
         
         # Validation après chaque époque
         print("Running validation...")
-        val_l1_loss, val_disc_loss = validate(test_loader)
-        print(f"Validation - L1 Loss: {val_l1_loss:.4f}, Disc Loss: {val_disc_loss:.4f}")
+        val_l1_loss = validate(test_loader)
+        print(f"Validation - L1 Loss: {val_l1_loss:.4f}")
         
         # Stocker les losses pour le graphique
-        epochs_list.append(epoch)
-        train_disc_losses.append(avg_train_disc_loss)
-        train_gen_losses.append(avg_train_gen_loss)
         train_l1_losses.append(avg_train_l1_loss)
         val_l1_losses.append(val_l1_loss)
-        val_disc_losses.append(val_disc_loss)
-        
-        wandb.log({
-            'val_l1_loss': val_l1_loss,
-            'val_disc_loss': val_disc_loss,
-            'epoch': epoch,
-            'avg_train_disc_loss': avg_train_disc_loss,
-            'avg_train_gen_loss': avg_train_gen_loss,
-            'avg_train_l1_loss': avg_train_l1_loss
-        })
-        
+
         # Sauvegarder le meilleur modèle basé sur la L1 loss de validation
         # TODO "img flou": https://doi.org/10.1038/s41746-025-01741-9 tester métrique composite (L1, PSNR, SSIM, FID)
         if val_l1_loss < best_val_loss: 
@@ -200,8 +170,7 @@ def fit(train_loader, test_loader, start_epoch, epochs):
                 'discriminator_optimizer': discriminator_optimizer.state_dict(),
                 'val_l1_loss': best_val_loss,
             }, best_model_path)
-            print(f"New best model saved! Val L1 Loss: {best_val_loss:.4f} (epoch {epoch})")
-            wandb.save(best_model_path)
+            print(f"best model saved")
         
         # Sauvegarder le dernier modèle à chaque époque
         os.makedirs(CHECKPOINT_DIR, exist_ok=True)
@@ -214,65 +183,24 @@ def fit(train_loader, test_loader, start_epoch, epochs):
             'val_l1_loss': val_l1_loss,
             'best_val_l1_loss': best_val_loss,
         }, last_model_path)
-        print(f"Last model saved (epoch {epoch})")
-
-        print(f"Time taken for epoch {epoch} is {time.time()-start:.2f} sec\n")
-        wandb.log({"epoch_time": time.time()-start})
+        print(f"Last model saved")
     
     # Créer et sauvegarder les graphiques de losses
-    create_loss_plots(epochs_list, train_disc_losses, train_gen_losses, train_l1_losses, 
-                     val_l1_losses, val_disc_losses)
+    create_loss_plots(epochs_list, train_l1_losses, val_l1_losses)
 
-def create_loss_plots(epochs, train_disc, train_gen, train_l1, val_l1, val_disc):
-    """Crée des graphiques pour visualiser l'évolution des losses"""
-    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-    
-    # Plot 1: L1 Loss (Train vs Val)
-    axes[0, 0].plot(epochs, train_l1, 'b-', label='Train L1 Loss', linewidth=2)
-    axes[0, 0].plot(epochs, val_l1, 'r-', label='Val L1 Loss', linewidth=2)
-    axes[0, 0].set_xlabel('Epoch')
-    axes[0, 0].set_ylabel('L1 Loss')
-    axes[0, 0].set_title('L1 Loss - Train vs Validation')
-    axes[0, 0].legend()
-    axes[0, 0].grid(True, alpha=0.3)
-    
-    # Plot 2: Discriminator Loss (Train vs Val)
-    axes[0, 1].plot(epochs, train_disc, 'b-', label='Train Disc Loss', linewidth=2)
-    axes[0, 1].plot(epochs, val_disc, 'r-', label='Val Disc Loss', linewidth=2)
-    axes[0, 1].set_xlabel('Epoch')
-    axes[0, 1].set_ylabel('Discriminator Loss')
-    axes[0, 1].set_title('Discriminator Loss - Train vs Validation')
-    axes[0, 1].legend()
-    axes[0, 1].grid(True, alpha=0.3)
-    
-    # Plot 3: Generator Total Loss
-    axes[1, 0].plot(epochs, train_gen, 'g-', label='Train Gen Total Loss', linewidth=2)
-    axes[1, 0].set_xlabel('Epoch')
-    axes[1, 0].set_ylabel('Generator Total Loss')
-    axes[1, 0].set_title('Generator Total Loss (GAN + λ*L1)')
-    axes[1, 0].legend()
-    axes[1, 0].grid(True, alpha=0.3)
-    
-    # Plot 4: Toutes les losses de validation
-    axes[1, 1].plot(epochs, val_l1, 'r-', label='Val L1 Loss', linewidth=2)
-    axes[1, 1].plot(epochs, val_disc, 'orange', label='Val Disc Loss', linewidth=2)
-    axes[1, 1].set_xlabel('Epoch')
-    axes[1, 1].set_ylabel('Loss')
-    axes[1, 1].set_title('All Validation Losses')
-    axes[1, 1].legend()
-    axes[1, 1].grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    
-    # Sauvegarder le graphique
+def create_loss_plots(epochs, train_l1, val_l1):
+    plt.plot(epochs, train_l1, 'b-', label='Train L1 Loss', linewidth=2)
+    plt.plot(epochs, val_l1, 'r-', label='Val L1 Loss', linewidth=2)
+    plt.xlabel('Epoch')
+    plt.ylabel('L1 Loss')
+    plt.title('L1 Loss - Train vs Validation')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
     os.makedirs('results', exist_ok=True)
     plot_path = os.path.join('results', 'training_losses.png')
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
     print(f"Loss plots saved to {plot_path}")
-    
-    # Log vers WandB
     wandb.log({"training_losses_plot": wandb.Image(plot_path)})
-    
     plt.close()
 
 # Start Training

@@ -7,3 +7,4 @@ results/
 src/__pycache__/
 wandb/
 /inference
+venv/

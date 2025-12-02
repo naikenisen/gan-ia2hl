@@ -137,29 +137,17 @@ def fit(train_loader, test_loader, start_epoch, epochs):
             best_val_loss = avg_ssim
             os.makedirs(CHECKPOINT_DIR, exist_ok=True)
             torch.save({
-                'epoch': epoch,
                 'generator': generator.state_dict(),
-                'discriminator': discriminator.state_dict(),
-                'generator_optimizer': generator_optimizer.state_dict(),
-                'discriminator_optimizer': discriminator_optimizer.state_dict(),
-                'val_ssim': best_val_loss,
-            }, best_model_path)
+            }, last_model_path)
             print(f"Best model saved (SSIM: {best_val_loss:.4f})")
         
         # Sauvegarder le dernier modèle à chaque époque
         os.makedirs(CHECKPOINT_DIR, exist_ok=True)
         torch.save({
-            'epoch': epoch,
             'generator': generator.state_dict(),
-            'discriminator': discriminator.state_dict(),
-            'generator_optimizer': generator_optimizer.state_dict(),
-            'discriminator_optimizer': discriminator_optimizer.state_dict(),
-            'val_ssim': avg_ssim,
-            'best_val_ssim': best_val_loss,
         }, last_model_path)
         print(f"Last model saved")
     
-    # Créer et sauvegarder les graphiques de losses
     create_loss_plots(epochs_list, train_gen_losses, val_ssim_values)
 
 def create_loss_plots(epochs, train_gen_loss, val_ssim):

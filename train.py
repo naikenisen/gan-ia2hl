@@ -201,7 +201,8 @@ def fit(train_loader, test_loader, start_epoch, epochs):
         })
         
         # Sauvegarder le meilleur modèle basé sur la L1 loss de validation
-        if val_l1_loss < best_val_loss:
+        # TODO "img flou": https://doi.org/10.1038/s41746-025-01741-9 tester métrique composite (L1, PSNR, SSIM, FID)
+        if val_l1_loss < best_val_loss: 
             best_val_loss = val_l1_loss
             os.makedirs(CHECKPOINT_DIR, exist_ok=True)
             torch.save({

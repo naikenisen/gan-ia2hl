@@ -34,7 +34,7 @@ discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=LRD, betas=(
 epoch_counter = 1
 best_model_path = os.path.join(CHECKPOINT_DIR, "best_model.pth")
 last_model_path = os.path.join(CHECKPOINT_DIR, "last_model.pth")
-best_val_ssim = float('-inf')  # Renommé et initialisé à -inf car on veut maximiser SSIM
+best_val_ssim = 0
 
 # fonction pour calculer la loss du discriminateur
 def discriminator_loss(disc_real_output, disc_generated_output):
@@ -81,17 +81,39 @@ def validate(test_loader):
     generator.eval()
     discriminator.eval()
     total_ssim = 0
+    total_l1 = 0
     num_batches = 0
     with torch.no_grad():
-        for input_image, target in test_loader:
+        for i, (input_image, target) in enumerate(test_loader):
             input_image = input_image.to(device)
             target = target.to(device)
             gen_output = generator(input_image)
+            
+            # Debug première epoch : vérifier les ranges et SSIM identique
+            if i == 0:
+                print(f"  [Debug] gen_output range: [{gen_output.min().item():.3f}, {gen_output.max().item():.3f}]")
+                print(f"  [Debug] target range: [{target.min().item():.3f}, {target.max().item():.3f}]")
+                
+                # Test : SSIM d'une image avec elle-même devrait être 1.0
+                ssim_self = ssim(target, target, data_range=2.0, size_average=True)
+                print(f"  [Debug] SSIM(target, target) = {ssim_self.item():.6f} (should be ~1.0)")
+                
+                # Test : SSIM avec une image de bruit devrait être très faible
+                noise = torch.randn_like(target)
+                ssim_noise = ssim(noise, target, data_range=2.0, size_average=True)
+                print(f"  [Debug] SSIM(noise, target) = {ssim_noise.item():.6f} (should be very low)")
+            
             # data_range=2.0 car les images sont normalisées dans [-1, 1]
             ssim_val = ssim(gen_output, target, data_range=2.0, size_average=True)
+            l1_val = criterion_l1(gen_output, target)
+            
             total_ssim += ssim_val.item()
+            total_l1 += l1_val.item()
             num_batches += 1
+    
     avg_ssim = total_ssim / num_batches
+    avg_l1 = total_l1 / num_batches
+    print(f"  Val L1: {avg_l1:.4f}")
     return avg_ssim
 
 # Training Loop

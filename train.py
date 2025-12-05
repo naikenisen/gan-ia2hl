@@ -109,10 +109,10 @@ def validate_lpips(test_loader, max_samples=None):
         return float('inf')
 
 # Training Loop
-def fit(train_loader, test_loader, start_epoch, epochs, lpips_frequency=1):
+def fit(train_loader, test_loader, start_epoch, epochs):
     """
     Entraîne le modèle et sauvegarde le meilleur basé sur le score LPIPS
-    lpips_frequency: calculer le LPIPS tous les X epochs
+    LPIPS est calculé à chaque époque
     """
     global epoch_counter, best_val_lpips
     train_gen_losses = []
@@ -147,50 +147,26 @@ def fit(train_loader, test_loader, start_epoch, epochs, lpips_frequency=1):
         # Stocker les metrics pour le graphique
         train_gen_losses.append(avg_gen_loss)
 
-        # Validation LPIPS
-        calculate_lpips_now = (epoch % lpips_frequency == 0 or epoch == epochs)
-        if calculate_lpips_now:
-            print("Running LPIPS validation...")
-            avg_lpips = validate_lpips(test_loader, max_samples=None)  # Utilise tous les échantillons
-            print(f"Val LPIPS: {avg_lpips:.4f}")
-            val_lpips_values.append(avg_lpips)
-            
-            # Sauvegarder le meilleur modèle basé sur LPIPS
-            if avg_lpips < best_val_lpips:
-                best_val_lpips = avg_lpips
-                os.makedirs(CHECKPOINT_DIR, exist_ok=True)
-                torch.save({
-                    'generator': generator.state_dict(),
-                    'epoch': epoch,
-                    'lpips': avg_lpips
-                }, best_model_path)
-                print(f"Best model saved based on LPIPS (Val LPIPS: {best_val_lpips:.4f})")
-            
-            # Log to wandb
-            wandb.log({
-                "epoch": epoch,
-                "train_gen_loss": avg_gen_loss,
-                "val_lpips": avg_lpips,
-                "best_val_lpips": best_val_lpips
-            })
-        else:
-            val_lpips_values.append(None)  # Placeholder pour les epochs sans calcul LPIPS
-            # Log to wandb (sans LPIPS)
-            wandb.log({
-                "epoch": epoch,
-                "train_gen_loss": avg_gen_loss,
-                "best_val_lpips": best_val_lpips if best_val_lpips != float('inf') else None
-            })
-    
+        # Validation LPIPS à chaque époque
+        print("Running LPIPS validation...")
+        avg_lpips = validate_lpips(test_loader, max_samples=None)  # Utilise tous les échantillons
+        print(f"Val LPIPS: {avg_lpips:.4f}")
+        val_lpips_values.append(avg_lpips)
+        
+        # Sauvegarder le meilleur modèle basé sur LPIPS
+        if avg_lpips < best_val_lpips:
+            best_val_lpips = avg_lpips
+            os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+            torch.save({
+                'generator': generator.state_dict(),
+                'epoch': epoch,
+                'lpips': avg_lpips
+            }, best_model_path)
+            print(f"Best model saved based on LPIPS (Val LPIPS: {best_val_lpips:.4f})")
     create_loss_plots(epochs_list, train_gen_losses, val_lpips_values)
 
 def create_loss_plots(epochs, train_gen_loss, val_lpips):
-    # Filtrer les valeurs LPIPS (enlever les None)
-    lpips_epochs = [e for e, l in zip(epochs, val_lpips) if l is not None]
-    lpips_values = [l for l in val_lpips if l is not None]
-    
     # Créer 2 subplots
-    has_lpips = len(lpips_values) > 0
     fig, axes = plt.subplots(1, 2, figsize=(15, 5))
     
     # Generator Total Loss
@@ -202,16 +178,12 @@ def create_loss_plots(epochs, train_gen_loss, val_lpips):
     axes[0].grid(True, alpha=0.3)
     
     # LPIPS Value (validation)
-    if has_lpips:
-        axes[1].plot(lpips_epochs, lpips_values, 'r-', marker='o', label='Val LPIPS', linewidth=2, markersize=8)
-        axes[1].set_xlabel('Epoch')
-        axes[1].set_ylabel('LPIPS Score')
-        axes[1].set_title('Validation LPIPS Score (lower is better)')
-        axes[1].legend()
-        axes[1].grid(True, alpha=0.3)
-    else:
-        axes[1].text(0.5, 0.5, 'No LPIPS data yet', ha='center', va='center', transform=axes[1].transAxes)
-        axes[1].set_title('Validation LPIPS Score')
+    axes[1].plot(epochs, val_lpips, 'r-', marker='o', label='Val LPIPS', linewidth=2, markersize=8)
+    axes[1].set_xlabel('Epoch')
+    axes[1].set_ylabel('LPIPS Score')
+    axes[1].set_title('Validation LPIPS Score (lower is better)')
+    axes[1].legend()
+    axes[1].grid(True, alpha=0.3)
     
     plt.tight_layout()
     os.makedirs('results', exist_ok=True)

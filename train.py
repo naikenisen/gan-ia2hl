@@ -48,7 +48,8 @@ def generator_loss(disc_generated_output, gen_output, target):
     gan_loss = criterion_bce(disc_generated_output, torch.ones_like(disc_generated_output))
     l1_loss = criterion_l1(gen_output, target)
     # SSIM loss (1 - SSIM car SSIM mesure la similarité, on veut minimiser la dissimilarité)
-    ssim_val = ssim(gen_output, target, data_range=1.0, size_average=True)
+    # data_range=2.0 car les images sont normalisées dans [-1, 1]
+    ssim_val = ssim(gen_output, target, data_range=2.0, size_average=True)
     ssim_loss = 1 - ssim_val
     # Loss composite
     gen_total_loss = gan_loss + (LAMBDA * l1_loss) + (LAMBDA_SSIM * ssim_loss)
@@ -86,7 +87,8 @@ def validate(test_loader):
             input_image = input_image.to(device)
             target = target.to(device)
             gen_output = generator(input_image)
-            ssim_val = ssim(gen_output, target, data_range=1.0, size_average=True)
+            # data_range=2.0 car les images sont normalisées dans [-1, 1]
+            ssim_val = ssim(gen_output, target, data_range=2.0, size_average=True)
             total_ssim += ssim_val.item()
             num_batches += 1
     avg_ssim = total_ssim / num_batches

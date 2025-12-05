@@ -48,8 +48,10 @@ def generator_loss(disc_generated_output, gen_output, target):
     gan_loss = criterion_bce(disc_generated_output, torch.ones_like(disc_generated_output))
     l1_loss = criterion_l1(gen_output, target)
     # SSIM loss (1 - SSIM car SSIM mesure la similarité, on veut minimiser la dissimilarité)
-    # data_range=2.0 car les images sont normalisées dans [-1, 1]
-    ssim_val = ssim(gen_output, target, data_range=2.0, size_average=True)
+    # Normaliser de [-1, 1] vers [0, 1] pour SSIM (plus standard et sûr)
+    gen_norm = (gen_output + 1) / 2
+    target_norm = (target + 1) / 2
+    ssim_val = ssim(gen_norm, target_norm, data_range=1.0, size_average=True)
     ssim_loss = 1 - ssim_val
     # Loss composite
     gen_total_loss = gan_loss + (LAMBDA * l1_loss) + (LAMBDA_SSIM * ssim_loss)
@@ -81,17 +83,24 @@ def validate(test_loader):
     generator.eval()
     discriminator.eval()
     total_ssim = 0
-    num_batches = 0
+    num_images = 0
     with torch.no_grad():
         for input_image, target in test_loader:
             input_image = input_image.to(device)
             target = target.to(device)
             gen_output = generator(input_image)
-            # data_range=2.0 car les images sont normalisées dans [-1, 1]
-            ssim_val = ssim(gen_output, target, data_range=2.0, size_average=True)
-            total_ssim += ssim_val.item()
-            num_batches += 1
-    avg_ssim = total_ssim / num_batches
+            # Normaliser de [-1, 1] vers [0, 1] pour SSIM (plus standard et sûr)
+            gen_norm = (gen_output + 1) / 2
+            target_norm = (target + 1) / 2
+            
+            # Calculer SSIM image par image pour plus de précision
+            batch_size = gen_norm.size(0)
+            for i in range(batch_size):
+                ssim_val = ssim(gen_norm[i:i+1], target_norm[i:i+1], data_range=1.0, size_average=True)
+                total_ssim += ssim_val.item()
+                num_images += 1
+    
+    avg_ssim = total_ssim / num_images
     return avg_ssim
 
 # Training Loop

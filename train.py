@@ -138,7 +138,7 @@ def fit(train_loader, test_loader, start_epoch, epochs):
             os.makedirs(CHECKPOINT_DIR, exist_ok=True)
             torch.save({
                 'generator': generator.state_dict(),
-            }, last_model_path)
+            }, best_model_path)
             print(f"Best model saved (SSIM: {best_val_loss:.4f})")
         
         # Sauvegarder le dernier modèle à chaque époque

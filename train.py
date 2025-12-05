@@ -34,7 +34,7 @@ discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=LRD, betas=(
 epoch_counter = 1
 best_model_path = os.path.join(CHECKPOINT_DIR, "best_model.pth")
 last_model_path = os.path.join(CHECKPOINT_DIR, "last_model.pth")
-best_val_ssim = float('-inf')  # Renommé et initialisé à -inf car on veut maximiser SSIM
+best_val_ssim = 0
 
 # fonction pour calculer la loss du discriminateur
 def discriminator_loss(disc_real_output, disc_generated_output):

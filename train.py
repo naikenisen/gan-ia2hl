@@ -34,7 +34,7 @@ discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=LRD, betas=(
 epoch_counter = 1
 best_model_path = os.path.join(CHECKPOINT_DIR, "best_model.pth")
 last_model_path = os.path.join(CHECKPOINT_DIR, "last_model.pth")
-best_val_loss = float('inf')
+best_val_ssim = float('-inf')  # Renommé et initialisé à -inf car on veut maximiser SSIM
 
 # fonction pour calculer la loss du discriminateur
 def discriminator_loss(disc_real_output, disc_generated_output):
@@ -96,7 +96,7 @@ def validate(test_loader):
 
 # Training Loop
 def fit(train_loader, test_loader, start_epoch, epochs):
-    global epoch_counter, best_val_loss
+    global epoch_counter, best_val_ssim
     train_gen_losses = []
     val_ssim_values = []
     epochs_list = []
@@ -135,13 +135,13 @@ def fit(train_loader, test_loader, start_epoch, epochs):
         val_ssim_values.append(avg_ssim)
 
         # Sauvegarder le meilleur modèle basé sur SSIM (plus haute = meilleure)
-        if avg_ssim > best_val_loss or epoch == start_epoch:
-            best_val_loss = avg_ssim
+        if avg_ssim > best_val_ssim:
+            best_val_ssim = avg_ssim
             os.makedirs(CHECKPOINT_DIR, exist_ok=True)
             torch.save({
                 'generator': generator.state_dict(),
             }, best_model_path)
-            print(f"Best model saved (SSIM: {best_val_loss:.4f})")
+            print(f"Best model saved (SSIM: {best_val_ssim:.4f})")
         
         # Sauvegarder le dernier modèle à chaque époque
         os.makedirs(CHECKPOINT_DIR, exist_ok=True)

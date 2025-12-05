@@ -12,4 +12,4 @@ MODEL_SCALE = 0.75
 CHECKPOINT_DIR = 'best_models'
 LRG = 2e-4
 LRD = 2e-4
-LAMBDA_SSIM = 0.1
+LAMBDA_SSIM = 10  # Augmenté pour avoir un impact significatif sur la loss

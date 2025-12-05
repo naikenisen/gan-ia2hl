@@ -34,7 +34,7 @@ discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=LRD, betas=(
 epoch_counter = 1
 best_model_path = os.path.join(CHECKPOINT_DIR, "best_model.pth")
 last_model_path = os.path.join(CHECKPOINT_DIR, "last_model.pth")
-best_val_ssim = 0
+best_val_l1 = float('inf')  # Sélection sur L1 validation (standard)
 
 # fonction pour calculer la loss du discriminateur
 def discriminator_loss(disc_real_output, disc_generated_output):
@@ -43,18 +43,12 @@ def discriminator_loss(disc_real_output, disc_generated_output):
     disc_total_loss = real_loss + generated_loss
     return disc_total_loss
 
-# fonction pour calculer la loss du générateur avec L1 + SSIM
+# fonction pour calculer la loss du générateur avec L1
 def generator_loss(disc_generated_output, gen_output, target):
     gan_loss = criterion_bce(disc_generated_output, torch.ones_like(disc_generated_output))
     l1_loss = criterion_l1(gen_output, target)
-    # SSIM loss (1 - SSIM car SSIM mesure la similarité, on veut minimiser la dissimilarité)
-    # Normaliser de [-1, 1] vers [0, 1] pour SSIM (plus standard et sûr)
-    gen_norm = (gen_output + 1) / 2
-    target_norm = (target + 1) / 2
-    ssim_val = ssim(gen_norm, target_norm, data_range=1.0, size_average=True)
-    ssim_loss = 1 - ssim_val
-    # Loss composite
-    gen_total_loss = gan_loss + (LAMBDA * l1_loss) + (LAMBDA_SSIM * ssim_loss)
+    # Pix2Pix standard : GAN loss + λ * L1 loss (typiquement λ=100)
+    gen_total_loss = gan_loss + (LAMBDA * l1_loss)
     return gen_total_loss
 
 def train_step(input_image, target):
@@ -78,36 +72,31 @@ def train_step(input_image, target):
     generator_optimizer.step()
     return gen_total_loss.item()
 
-# Validation avec SSIM
+# Validation avec L1 (standard pour sélectionner le meilleur modèle)
 def validate(test_loader):
     generator.eval()
     discriminator.eval()
-    total_ssim = 0
-    num_images = 0
+    total_l1 = 0
+    num_batches = 0
     with torch.no_grad():
         for input_image, target in test_loader:
             input_image = input_image.to(device)
             target = target.to(device)
             gen_output = generator(input_image)
-            # Normaliser de [-1, 1] vers [0, 1] pour SSIM (plus standard et sûr)
-            gen_norm = (gen_output + 1) / 2
-            target_norm = (target + 1) / 2
             
-            # Calculer SSIM image par image pour plus de précision
-            batch_size = gen_norm.size(0)
-            for i in range(batch_size):
-                ssim_val = ssim(gen_norm[i:i+1], target_norm[i:i+1], data_range=1.0, size_average=True)
-                total_ssim += ssim_val.item()
-                num_images += 1
+            # L1 loss pour validation (standard en image-to-image translation)
+            l1_val = criterion_l1(gen_output, target)
+            total_l1 += l1_val.item()
+            num_batches += 1
     
-    avg_ssim = total_ssim / num_images
-    return avg_ssim
+    avg_l1 = total_l1 / num_batches
+    return avg_l1
 
 # Training Loop
 def fit(train_loader, test_loader, start_epoch, epochs):
-    global epoch_counter, best_val_ssim
+    global epoch_counter, best_val_l1
     train_gen_losses = []
-    val_ssim_values = []
+    val_l1_values = []
     epochs_list = []
     
     for epoch in range(start_epoch, epochs + 1):
@@ -136,21 +125,21 @@ def fit(train_loader, test_loader, start_epoch, epochs):
         
         # Validation après chaque époque
         print("Running validation...")
-        avg_ssim = validate(test_loader)
-        print(f"Train Gen Loss: {avg_gen_loss:.4f}, Val SSIM: {avg_ssim:.4f}")
+        avg_l1 = validate(test_loader)
+        print(f"Train Gen Loss: {avg_gen_loss:.4f}, Val L1: {avg_l1:.4f}")
 
         # Stocker les metrics pour le graphique
         train_gen_losses.append(avg_gen_loss)
-        val_ssim_values.append(avg_ssim)
+        val_l1_values.append(avg_l1)
 
-        # Sauvegarder le meilleur modèle basé sur SSIM (plus haute = meilleure)
-        if avg_ssim > best_val_ssim:
-            best_val_ssim = avg_ssim
+        # Sauvegarder le meilleur modèle basé sur L1 validation (standard en image translation)
+        if avg_l1 < best_val_l1:
+            best_val_l1 = avg_l1
             os.makedirs(CHECKPOINT_DIR, exist_ok=True)
             torch.save({
                 'generator': generator.state_dict(),
             }, best_model_path)
-            print(f"Best model saved (SSIM: {best_val_ssim:.4f})")
+            print(f"Best model saved (Val L1: {best_val_l1:.4f})")
         
         # Sauvegarder le dernier modèle à chaque époque
         os.makedirs(CHECKPOINT_DIR, exist_ok=True)
@@ -159,9 +148,9 @@ def fit(train_loader, test_loader, start_epoch, epochs):
         }, last_model_path)
         print(f"Last model saved")
     
-    create_loss_plots(epochs_list, train_gen_losses, val_ssim_values)
+    create_loss_plots(epochs_list, train_gen_losses, val_l1_values)
 
-def create_loss_plots(epochs, train_gen_loss, val_ssim):
+def create_loss_plots(epochs, train_gen_loss, val_l1):
     fig, axes = plt.subplots(1, 2, figsize=(15, 5))
     
     # Generator Total Loss
@@ -172,11 +161,11 @@ def create_loss_plots(epochs, train_gen_loss, val_ssim):
     axes[0].legend()
     axes[0].grid(True, alpha=0.3)
     
-    # SSIM Value (validation)
-    axes[1].plot(epochs, val_ssim, 'm-', label='Val SSIM', linewidth=2)
+    # L1 Value (validation)
+    axes[1].plot(epochs, val_l1, 'r-', label='Val L1', linewidth=2)
     axes[1].set_xlabel('Epoch')
-    axes[1].set_ylabel('SSIM')
-    axes[1].set_title('Validation SSIM (higher is better)')
+    axes[1].set_ylabel('L1 Loss')
+    axes[1].set_title('Validation L1 Loss (lower is better)')
     axes[1].legend()
     axes[1].grid(True, alpha=0.3)
     

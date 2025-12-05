@@ -12,8 +12,7 @@ import torch.nn as nn
 from src.models import Generator, Discriminator
 from src.data_loader_regions import train_loader, test_loader
 from pytorch_msssim import ssim
-import scipy.linalg
-from torch.nn import functional as F
+import lpips
 
 wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
 
@@ -34,8 +33,11 @@ generator_optimizer = optim.Adam(generator.parameters(), lr=LRG, betas=(0.5, 0.9
 discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=LRD, betas=(0.5, 0.999))
 
 epoch_counter = 1
-best_model_path = os.path.join(CHECKPOINT_DIR, "best_model.pth")  # Meilleur modèle basé sur FID
-best_val_fid = float('inf')  # Sélection sur FID validation (lower is better)
+best_model_path = os.path.join(CHECKPOINT_DIR, "best_model.pth")  # Meilleur modèle basé sur LPIPS
+best_val_lpips = float('inf')  # Sélection sur LPIPS validation (lower is better)
+
+# Initialize LPIPS model
+lpips_model = lpips.LPIPS(net='alex').to(device)
 
 # fonction pour calculer la loss du discriminateur
 def discriminator_loss(disc_real_output, disc_generated_output):
@@ -72,90 +74,49 @@ def train_step(input_image, target):
     generator_optimizer.step()
     return gen_total_loss.item()
 
-# Fonction pour calculer FID pendant la validation
-def calculate_fid_from_images(real_images, generated_images, device):
-    """Calculate FID score using InceptionV3 features"""
-    from torchvision.models import inception_v3
-    
-    # Load InceptionV3 model in feature extraction mode
-    inception_model = inception_v3(pretrained=True, transform_input=False).to(device)
-    inception_model.fc = nn.Identity()  # Remove final classification layer
-    inception_model.eval()
-    
-    def get_features(images):
-        features = []
-        with torch.no_grad():
-            for img in images:
-                # Resize to 299x299 for InceptionV3
-                img_resized = F.interpolate(
-                    img.unsqueeze(0), size=(299, 299), mode='bilinear', align_corners=False
-                )
-                # InceptionV3 expects images normalized to [-1, 1] which we already have
-                feat = inception_model(img_resized)
-                # feat is now a 1D tensor of features from the last pooling layer
-                features.append(feat.squeeze().cpu().numpy())
-        return np.array(features)
-    
-    # Get features
-    real_features = get_features(real_images)
-    gen_features = get_features(generated_images)
-    
-    # Calculate mean and covariance
-    mu_real = np.mean(real_features, axis=0)
-    mu_gen = np.mean(gen_features, axis=0)
-    sigma_real = np.cov(real_features, rowvar=False)
-    sigma_gen = np.cov(gen_features, rowvar=False)
-    
-    # Calculate FID
-    diff = mu_real - mu_gen
-    covmean = scipy.linalg.sqrtm(sigma_real.dot(sigma_gen))
-    
-    if np.iscomplexobj(covmean):
-        covmean = covmean.real
-    
-    fid = diff.dot(diff) + np.trace(sigma_real + sigma_gen - 2 * covmean)
-    return fid
-
-# Validation avec FID
-def validate_fid(test_loader, max_samples=50):
+# Validation avec LPIPS
+def validate_lpips(test_loader, max_samples=None):
     """
-    Calcule le FID score sur un sous-ensemble de données de validation
-    max_samples: nombre maximum d'échantillons à utiliser pour calculer le FID
+    Calcule le score LPIPS moyen sur les données de validation
+    max_samples: nombre maximum d'échantillons à utiliser (None = tous)
     """
     generator.eval()
     discriminator.eval()
+    lpips_model.eval()
     
-    real_images_for_fid = []
-    generated_images_for_fid = []
+    total_lpips = 0
+    num_samples = 0
     
     with torch.no_grad():
         for idx, (input_image, target) in enumerate(test_loader):
-            if idx >= max_samples:
+            if max_samples is not None and idx >= max_samples:
                 break
                 
             input_image = input_image.to(device)
             target = target.to(device)
             gen_output = generator(input_image)
             
-            # Store images for FID calculation (batch size of 1 assumed)
-            real_images_for_fid.append(target[0])
-            generated_images_for_fid.append(gen_output[0])
+            # Calculate LPIPS for this batch
+            # LPIPS expects images in range [-1, 1]
+            lpips_value = lpips_model(gen_output, target)
+            total_lpips += lpips_value.mean().item()
+            num_samples += 1
     
-    if len(real_images_for_fid) > 1:
-        fid_score = calculate_fid_from_images(real_images_for_fid, generated_images_for_fid, device)
-        return fid_score
+    if num_samples > 0:
+        avg_lpips = total_lpips / num_samples
+        return avg_lpips
     else:
         return float('inf')
 
 # Training Loop
-def fit(train_loader, test_loader, start_epoch, epochs, fid_frequency=5):
+def fit(train_loader, test_loader, start_epoch, epochs, lpips_frequency=1):
     """
-    Entraîne le modèle et sauvegarde le meilleur basé sur le FID score
-    fid_frequency: calculer le FID tous les X epochs (FID est coûteux en calcul)
+    Entraîne le modèle et sauvegarde le meilleur basé sur le score LPIPS
+    lpips_frequency: calculer le LPIPS tous les X epochs
     """
-    global epoch_counter, best_val_fid
+    global epoch_counter, best_val_lpips
     train_gen_losses = []
-    val_fid_values = []
+    val_lpips_values = []
     epochs_list = []
     
     for epoch in range(start_epoch, epochs + 1):
@@ -186,36 +147,50 @@ def fit(train_loader, test_loader, start_epoch, epochs, fid_frequency=5):
         # Stocker les metrics pour le graphique
         train_gen_losses.append(avg_gen_loss)
 
-        # Validation FID (moins fréquent car coûteux)
-        calculate_fid_now = (epoch % fid_frequency == 0 or epoch == epochs)
-        if calculate_fid_now:
-            print("Running FID validation...")
-            avg_fid = validate_fid(test_loader, max_samples=50)
-            print(f"Val FID: {avg_fid:.4f}")
-            val_fid_values.append(avg_fid)
+        # Validation LPIPS
+        calculate_lpips_now = (epoch % lpips_frequency == 0 or epoch == epochs)
+        if calculate_lpips_now:
+            print("Running LPIPS validation...")
+            avg_lpips = validate_lpips(test_loader, max_samples=None)  # Utilise tous les échantillons
+            print(f"Val LPIPS: {avg_lpips:.4f}")
+            val_lpips_values.append(avg_lpips)
             
-            # Sauvegarder le meilleur modèle basé sur FID
-            if avg_fid < best_val_fid:
-                best_val_fid = avg_fid
+            # Sauvegarder le meilleur modèle basé sur LPIPS
+            if avg_lpips < best_val_lpips:
+                best_val_lpips = avg_lpips
                 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
                 torch.save({
                     'generator': generator.state_dict(),
                     'epoch': epoch,
-                    'fid': avg_fid
+                    'lpips': avg_lpips
                 }, best_model_path)
-                print(f"Best model saved based on FID (Val FID: {best_val_fid:.4f})")
+                print(f"Best model saved based on LPIPS (Val LPIPS: {best_val_lpips:.4f})")
+            
+            # Log to wandb
+            wandb.log({
+                "epoch": epoch,
+                "train_gen_loss": avg_gen_loss,
+                "val_lpips": avg_lpips,
+                "best_val_lpips": best_val_lpips
+            })
         else:
-            val_fid_values.append(None)  # Placeholder pour les epochs sans calcul FID
+            val_lpips_values.append(None)  # Placeholder pour les epochs sans calcul LPIPS
+            # Log to wandb (sans LPIPS)
+            wandb.log({
+                "epoch": epoch,
+                "train_gen_loss": avg_gen_loss,
+                "best_val_lpips": best_val_lpips if best_val_lpips != float('inf') else None
+            })
     
-    create_loss_plots(epochs_list, train_gen_losses, val_fid_values)
+    create_loss_plots(epochs_list, train_gen_losses, val_lpips_values)
 
-def create_loss_plots(epochs, train_gen_loss, val_fid):
-    # Filtrer les valeurs FID (enlever les None)
-    fid_epochs = [e for e, f in zip(epochs, val_fid) if f is not None]
-    fid_values = [f for f in val_fid if f is not None]
+def create_loss_plots(epochs, train_gen_loss, val_lpips):
+    # Filtrer les valeurs LPIPS (enlever les None)
+    lpips_epochs = [e for e, l in zip(epochs, val_lpips) if l is not None]
+    lpips_values = [l for l in val_lpips if l is not None]
     
     # Créer 2 subplots
-    has_fid = len(fid_values) > 0
+    has_lpips = len(lpips_values) > 0
     fig, axes = plt.subplots(1, 2, figsize=(15, 5))
     
     # Generator Total Loss
@@ -226,17 +201,17 @@ def create_loss_plots(epochs, train_gen_loss, val_fid):
     axes[0].legend()
     axes[0].grid(True, alpha=0.3)
     
-    # FID Value (validation)
-    if has_fid:
-        axes[1].plot(fid_epochs, fid_values, 'g-', marker='o', label='Val FID', linewidth=2, markersize=8)
+    # LPIPS Value (validation)
+    if has_lpips:
+        axes[1].plot(lpips_epochs, lpips_values, 'r-', marker='o', label='Val LPIPS', linewidth=2, markersize=8)
         axes[1].set_xlabel('Epoch')
-        axes[1].set_ylabel('FID Score')
-        axes[1].set_title('Validation FID Score (lower is better)')
+        axes[1].set_ylabel('LPIPS Score')
+        axes[1].set_title('Validation LPIPS Score (lower is better)')
         axes[1].legend()
         axes[1].grid(True, alpha=0.3)
     else:
-        axes[1].text(0.5, 0.5, 'No FID data yet', ha='center', va='center', transform=axes[1].transAxes)
-        axes[1].set_title('Validation FID Score')
+        axes[1].text(0.5, 0.5, 'No LPIPS data yet', ha='center', va='center', transform=axes[1].transAxes)
+        axes[1].set_title('Validation LPIPS Score')
     
     plt.tight_layout()
     os.makedirs('results', exist_ok=True)

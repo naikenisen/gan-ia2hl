@@ -10,8 +10,8 @@ from src.config import device, MODEL_SCALE, CHECKPOINT_DIR, IMG_HEIGHT, IMG_WIDT
 from torchvision import transforms
 from src.models import Generator
 
-hes_train_path = 'inference/original_hes_train.jpg.jpg'
-hes_test_path = 'inference/original_hes_test.jpg.jpg'
+hes_train_path = 'inference/original_hes_train.jpg'
+hes_test_path = 'inference/original_hes_test.jpg'
 
 os.makedirs('inference', exist_ok=True)
 generator = Generator(MODEL_SCALE).to(device)
@@ -55,9 +55,9 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import numpy as np
 # Charger les images
-img1 = mpimg.imread('inference/original_hes_train.jpg.jpg')
+img1 = mpimg.imread('inference/original_hes_train.jpg')
 img2 = mpimg.imread('inference/inference_train.png')
-img3 = mpimg.imread('inference/original_hes_test.jpg.jpg')
+img3 = mpimg.imread('inference/original_hes_test.jpg')
 img4 = mpimg.imread('inference/inference_test.png')
 # Créer la figure avec 4 sous-plots côte à côte
 fig, axes = plt.subplots(1, 4, figsize=(20, 5))

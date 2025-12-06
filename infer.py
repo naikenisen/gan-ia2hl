@@ -55,9 +55,9 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import numpy as np
 # Charger les images
-img1 = mpimg.imread('inference/original_hes_train.jpg')
+img1 = mpimg.imread('inference/original_cd30_train.jpg')
 img2 = mpimg.imread('inference/inference_train.png')
-img3 = mpimg.imread('inference/original_hes_test.jpg')
+img3 = mpimg.imread('inference/original_cd30_test.jpg')
 img4 = mpimg.imread('inference/inference_test.png')
 # Créer la figure avec 4 sous-plots côte à côte
 fig, axes = plt.subplots(1, 4, figsize=(20, 5))

@@ -62,7 +62,11 @@ img4 = mpimg.imread('inference/inference_test.png')
 # Créer la figure avec 4 sous-plots côte à côte
 fig, axes = plt.subplots(1, 4, figsize=(20, 5))
 # Espacer légèrement les images
-plt.subplots_adjust(wspace=0.05)
+plt.subplots_adjust(wspace=0.05, top=0.85)
+
+# Titres pour chaque image
+titles = ['IHC Original (Train)', 'IHC Synthétique (Train)', 
+          'IHC Original (Test)', 'IHC Synthétique (Test)']
 # Paramètres du quadrillage
 grid_spacing = 10  # Nombre de lignes/colonnes dans le quadrillage
 # Afficher les images et ajouter le quadrillage
@@ -75,6 +79,10 @@ for idx, ax in enumerate(axes):
         ax.imshow(img3)
     else:
         ax.imshow(img4)
+    
+    # Ajouter le titre
+    ax.set_title(titles[idx], fontsize=14, weight='bold', pad=20)
+    
     # Obtenir les dimensions de l'image affichée
     xlim = ax.get_xlim()
     ylim = ax.get_ylim()

@@ -23,7 +23,7 @@ from scipy.spatial.distance import jensenshannon
 from scipy.stats import entropy
 from src.config import device, MODEL_SCALE, CHECKPOINT_DIR
 from src.models import Generator
-from src import data_loader_regions
+from src import data_loader
 
 os.makedirs('results', exist_ok=True)
 generator = Generator(MODEL_SCALE).to(device)

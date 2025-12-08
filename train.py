@@ -10,7 +10,7 @@ from PIL import Image
 import wandb
 import torch.nn as nn
 from src.models import Generator, Discriminator
-from src.data_loader_regions import train_loader, test_loader
+from src.data_loader import train_loader, test_loader
 from pytorch_msssim import ssim
 import lpips
 

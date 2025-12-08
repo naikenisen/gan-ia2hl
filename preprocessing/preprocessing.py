@@ -18,8 +18,8 @@ wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
 # todo : enlever les régions et ne garder que les patches extraits
 
 # Configuration
-hes_slide_path = "/silver/ube/slides/j_HES.svs"
-cd30_slide_path = "/silver/ube/slides/j_CD30.svs"
+hes_slide_path = "/silver/ube/slides/l_HES.svs"
+cd30_slide_path = "/silver/ube/slides/l_CD30.svs"
 output_folder = "/silver/ube/extraction_v1"
 patch_size = 2000
 stride_patch = 1500

@@ -102,7 +102,7 @@ def process_one_slide_pair_visualization(hes_path, cd30_path):
     slide_cd30.close()
 
 if __name__ == "__main__":
-    hes_path = "/silver/ube/slides/j_HES.svs"
-    cd30_path = "/silver/ube/slides/j_CD30.svs"
+    hes_path = "/silver/ube/slides/l_HES.svs"
+    cd30_path = "/silver/ube/slides/l_CD30.svs"
     output_folder = "/silver/ube/visualization"
     process_one_slide_pair_visualization(hes_path, cd30_path)

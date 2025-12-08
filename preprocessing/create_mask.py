@@ -18,7 +18,7 @@ def compute_tissue_mask(img_rgb):
     return mask
 
 if __name__ == "__main__":
-    image_path = "/silver/ube/slides/a_HES.svs"
+    image_path = "/silver/ube/slides/j_HES.svs"
     level = 2
 
     slide = openslide.OpenSlide(image_path)

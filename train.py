@@ -16,10 +16,12 @@ import lpips
 wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
 
 wandb.init(
-    project="ia2hl-gan"
+    project="ia2hl-gan",
+    device_type=device.type
 )
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f"Using device: {device}")
 
 # ajout des modèles sur le GPU
 generator = Generator(MODEL_SCALE).to(device)

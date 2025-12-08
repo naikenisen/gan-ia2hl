@@ -9,6 +9,7 @@ from skimage.measure import ransac
 from skimage.transform import AffineTransform
 import warnings
 import wandb
+from tqdm import tqdm
 warnings.filterwarnings('ignore')
 from create_mask import compute_tissue_mask
 from registration import register_whole_slide
@@ -32,13 +33,7 @@ os.makedirs(hes_dir, exist_ok=True)
 os.makedirs(cd30_dir, exist_ok=True)
 
 wandb.init(
-    project="ia2hl-preprocessing",
-    config={
-        "patch_size": patch_size,
-        "stride_patch": stride_patch,
-        "tissue_threshold": tissue_threshold,
-        "level": level
-    }
+    project="ia2hl-preprocessing"
 )
 
 def patch_has_tissue(x, y, mask, downsample):
@@ -73,8 +68,18 @@ def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
     downsample_hes = int(slide_hes.level_downsamples[level])
     downsample_cd30 = int(slide_cd30.level_downsamples[level])
 
+    # Calculer le nombre total d'itérations possibles
+    y_positions = range(0, h0_hes, patch_size)
+    x_positions = range(0, w0_hes, patch_size)
+    total_iterations = len(list(y_positions)) * len(list(x_positions))
+    
+    # Créer la barre de progression
+    pbar = tqdm(total=total_iterations, desc=f"Extraction patches {patient_id}", unit="patch")
+
     for y in range(0, h0_hes, patch_size):
         for x in range(0, w0_hes, patch_size):
+            pbar.update(1)
+            
             if x + patch_size > w0_hes or y + patch_size > h0_hes:
                 continue
             if not patch_has_tissue(x, y, mask_hes, downsample_hes):
@@ -98,6 +103,9 @@ def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
             patch_hes.save(os.path.join(patient_hes_dir, patch_name), optimize=False)
             patch_cd30.save(os.path.join(patient_cd30_dir, patch_name), optimize=False)
             total_patch_count += 1
+            pbar.set_postfix({"patches_extraits": total_patch_count})
+    
+    pbar.close()
     slide_hes.close()
     slide_cd30.close()
     return total_patch_count

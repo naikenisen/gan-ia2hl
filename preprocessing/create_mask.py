@@ -18,29 +18,23 @@ def compute_tissue_mask(img_rgb):
     return mask
 
 if __name__ == "__main__":
-    folder = "/silver/ube/slides"
-    svs_files = [f for f in os.listdir(folder) if f.lower().endswith("HES.svs")]
+    image_path = "/silver/ube/slides/a_HES.svs.svs"
     level = 2
 
-    n = len(svs_files)
-    cols = 4
-    rows = 2 * math.ceil(n / cols)
+    slide = openslide.OpenSlide(image_path)
+    w, h = slide.level_dimensions[level]
+    img = slide.read_region((0, 0), level, (w, h)).convert("RGB")
+    mask = compute_tissue_mask(img)
 
-    plt.figure(figsize=(5 * cols, 5 * rows))
-    for idx, filename in enumerate(svs_files):
-        path = os.path.join(folder, filename)
-        slide = openslide.OpenSlide(path)
-        w, h = slide.level_dimensions[level]
-        img = slide.read_region((0, 0), level, (w, h)).convert("RGB")
-        mask = compute_tissue_mask(img)
-        base_row = (idx // cols) * 2
-        col = idx % cols
-        plt.subplot(rows, cols, base_row * cols + col + 1)
-        plt.imshow(img)
-        plt.axis("off")
-        plt.subplot(rows, cols, (base_row + 1) * cols + col + 1)
-        plt.imshow(mask, cmap="gray")
-        plt.axis("off")
+    plt.figure(figsize=(10, 5))
+    plt.subplot(1, 2, 1)
+    plt.imshow(img)
+    plt.axis("off")
+    plt.title("Original Image")
+    plt.subplot(1, 2, 2)
+    plt.imshow(mask, cmap="gray")
+    plt.axis("off")
+    plt.title("Tissue Mask")
 
     plt.tight_layout()
-    plt.savefig("tissue_masks.png", dpi=500)
+    plt.savefig("tissue_mask_single.png", dpi=500)

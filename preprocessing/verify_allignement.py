@@ -10,7 +10,7 @@ import math
 cd30_dir = Path("/silver/ube/extraction_v1/CD30")
 hes_dir = Path("/silver/ube/extraction_v1/HES")
 
-selected_patient = "a"
+selected_patient = "l"
 n_pairs = 20
 
 def extract_coords(filename):
@@ -70,6 +70,6 @@ for i, (coords, hes_path, cd30_path) in enumerate(selected_pairs):
     axes[i][0].set_ylabel(f'Patient: {patient}\nCoords: x={coords[0]}, y={coords[1]}', 
                             fontsize=12, fontweight='bold')
 plt.tight_layout(rect=[0, 0.03, 1, 0.97])
-output_name = f"planche_paires_patches_patient_{selected_patient if selected_patient else 'all'}.png"
+output_name = f"planche_paires_patches_patient_{selected_patient}.png"
 plt.savefig(f"/silver/ube/visualization/{output_name}", dpi=200)
 plt.close()

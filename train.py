@@ -75,45 +75,26 @@ def train_step(input_image, target):
     return gen_total_loss.item()
 
 # Validation avec LPIPS
-def validate_lpips(test_loader, max_samples=None):
-    """
-    Calcule le score LPIPS moyen sur les données de validation
-    max_samples: nombre maximum d'échantillons à utiliser (None = tous)
-    """
+def validate_lpips(test_loader):
     generator.eval()
     discriminator.eval()
     lpips_model.eval()
-    
     total_lpips = 0
     num_samples = 0
-    
     with torch.no_grad():
         for idx, (input_image, target) in enumerate(test_loader):
-            if max_samples is not None and idx >= max_samples:
-                break
-                
             input_image = input_image.to(device)
             target = target.to(device)
             gen_output = generator(input_image)
-            
-            # Calculate LPIPS for this batch
-            # LPIPS expects images in range [-1, 1]
             lpips_value = lpips_model(gen_output, target)
             total_lpips += lpips_value.mean().item()
             num_samples += 1
-    
-    if num_samples > 0:
-        avg_lpips = total_lpips / num_samples
-        return avg_lpips
-    else:
-        return float('inf')
+    avg_lpips = total_lpips / num_samples
+    return avg_lpips
 
 # Training Loop
 def fit(train_loader, test_loader, start_epoch, epochs):
-    """
-    Entraîne le modèle et sauvegarde le meilleur basé sur le score LPIPS
-    LPIPS est calculé à chaque époque
-    """
+
     global epoch_counter, best_val_lpips
     train_gen_losses = []
     val_lpips_values = []

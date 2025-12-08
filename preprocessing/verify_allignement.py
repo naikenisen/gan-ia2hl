@@ -78,5 +78,5 @@ for i, (coords, hes_path, cd30_path) in enumerate(selected_pairs[:num_pairs]):
     axes[i][0].set_ylabel(f'Patient: {patient}\nCoords: x={coords[0]}, y={coords[1]}', fontsize=12, fontweight='bold')
 
 plt.tight_layout(rect=[0, 0.03, 1, 0.97])
-plt.savefig("results/planche_paires_patches.png", dpi=200)
+plt.savefig("/silver/ube/visualization/planche_paires_patches.png", dpi=200)
 plt.close()

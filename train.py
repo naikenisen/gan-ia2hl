@@ -10,7 +10,7 @@ from PIL import Image
 import wandb
 import torch.nn as nn
 from src.models import Generator, Discriminator
-from src.data_loader import train_loader, test_loader
+from src.data_loader import train_loader, valid_loader
 from pytorch_msssim import ssim
 import lpips
 
@@ -75,14 +75,14 @@ def train_step(input_image, target):
     return gen_total_loss.item()
 
 # Validation avec LPIPS
-def validate_lpips(test_loader):
+def validate_lpips(valid_loader):
     generator.eval()
     discriminator.eval()
     lpips_model.eval()
     total_lpips = 0
     num_samples = 0
     with torch.no_grad():
-        for idx, (input_image, target) in enumerate(test_loader):
+        for idx, (input_image, target) in enumerate(valid_loader):
             input_image = input_image.to(device)
             target = target.to(device)
             gen_output = generator(input_image)
@@ -93,7 +93,7 @@ def validate_lpips(test_loader):
     return avg_lpips
 
 # Training Loop
-def fit(train_loader, test_loader, start_epoch, epochs):
+def fit(train_loader, valid_loader, start_epoch, epochs):
 
     global epoch_counter, best_val_lpips
     train_gen_losses = []
@@ -130,7 +130,7 @@ def fit(train_loader, test_loader, start_epoch, epochs):
 
         # Validation LPIPS à chaque époque
         print("Running LPIPS validation...")
-        avg_lpips = validate_lpips(test_loader, max_samples=None)  # Utilise tous les échantillons
+        avg_lpips = validate_lpips(valid_loader, max_samples=None)  # Utilise tous les échantillons
         print(f"Val LPIPS: {avg_lpips:.4f}")
         val_lpips_values.append(avg_lpips)
         
@@ -175,6 +175,6 @@ def create_loss_plots(epochs, train_gen_loss, val_lpips):
     plt.close()
 
 # Start Training
-fit(train_loader, test_loader, start_epoch=epoch_counter, epochs=EPOCHS)
+fit(train_loader, valid_loader, start_epoch=epoch_counter, epochs=EPOCHS)
 
 wandb.finish()

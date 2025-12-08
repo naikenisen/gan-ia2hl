@@ -1,6 +1,6 @@
 import torch
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-BASE_HandE_PATH = 'ia2hl_data/train/HES'
+BASE_HES_PATH = 'ia2hl_data/train/HES'
 BASE_IHC_PATH = 'ia2hl_data/train/CD30'
 BUFFER_SIZE = 400
 BATCH_SIZE = 4

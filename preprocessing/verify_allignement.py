@@ -7,8 +7,8 @@ from collections import defaultdict
 import random
 import math
 
-cd30_dir = Path("results/CD30")
-hes_dir = Path("results/HES")
+cd30_dir = Path("/silver/ube/extraction_v1/CD30")
+hes_dir = Path("/silver/ube/extraction_v1/HES")
 # Nombre d'images à afficher
 n_pairs = 20
 def extract_coords(filename):

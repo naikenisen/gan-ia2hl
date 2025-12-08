@@ -17,8 +17,8 @@ wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
 # todo : enlever les régions et ne garder que les patches extraits
 
 # Configuration
-hes_slide_path = "/silver/ube/slides/AHL004_HES.svs"
-cd30_slide_path = "/silver/ube/slides/AHL004_CD30.svs"
+hes_slide_path = "/silver/ube/slides/a_HES.svs"
+cd30_slide_path = "/silver/ube/slides/a_CD30.svs"
 output_folder = "/silver/ube/extraction_v1"
 patch_size = 2000
 stride_patch = 1500
@@ -67,13 +67,6 @@ def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
     print(" Calcul du masque de tissu...")
     mask_hes = compute_tissue_mask(lowres_hes)
     model = register_whole_slide(lowres_hes_np, lowres_cd30_np, patient_id)
-    if model is None:
-        print(f"[Patient {patient_id}] Modèle de registration nul, passage au patient suivant.")
-        slide_hes.close()
-        slide_cd30.close()
-        return
-
-    patch_count = 0
     total_patch_count = 0
     w0_hes, h0_hes = slide_hes.level_dimensions[0]
     w0_cd30, h0_cd30 = slide_cd30.level_dimensions[0]
@@ -104,34 +97,11 @@ def process_slide_pair(hes_path, cd30_path, hes_dir, cd30_dir):
             patch_name = f"patch_x{x}_y{y}.jpg"
             patch_hes.save(os.path.join(patient_hes_dir, patch_name), optimize=False)
             patch_cd30.save(os.path.join(patient_cd30_dir, patch_name), optimize=False)
-            patch_count += 1
             total_patch_count += 1
-            print(f"{patch_count} paires de patches extraites")
-    print(f"Total: {total_patch_count} paires de patches extraites")
-
     slide_hes.close()
     slide_cd30.close()
     return total_patch_count
 
-# Vérification de l'existence des fichiers
-if not os.path.exists(hes_slide_path):
-    print(f"Erreur: Fichier HES non trouvé: {hes_slide_path}")
-    wandb.finish()
-    exit(1)
-
-if not os.path.exists(cd30_slide_path):
-    print(f"Erreur: Fichier CD30 non trouvé: {cd30_slide_path}")
-    wandb.finish()
-    exit(1)
-
-print(f"\nTraitement des lames:")
-print(f"Fichier HES: {hes_slide_path}")
-print(f"Fichier CD30: {cd30_slide_path}")
-
 patch_count = process_slide_pair(hes_slide_path, cd30_slide_path, hes_dir, cd30_dir)
-        
-print("\nTRAITEMENT TERMINÉ")
 print(f"Total: {patch_count} paires de patches extraites")
-print(f"Patches HES sauvegardés dans: {hes_dir}")
-print(f"Patches CD30 sauvegardés dans: {cd30_dir}")
 wandb.finish()

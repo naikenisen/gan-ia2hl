@@ -11,3 +11,4 @@ venv/
 documents
 torch_cache/
 visualization/
+dataset/

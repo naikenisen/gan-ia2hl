@@ -37,4 +37,4 @@ if __name__ == "__main__":
     plt.title("Tissue Mask")
 
     plt.tight_layout()
-    plt.savefig("tissue_mask_single.png", dpi=500)
+    plt.savefig("/silver/ube/visualization/tissue_mask_single.png", dpi=500)

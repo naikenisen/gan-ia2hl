@@ -10,7 +10,7 @@ import math
 cd30_dir = Path("/silver/ube/extraction_v1/CD30")
 hes_dir = Path("/silver/ube/extraction_v1/HES")
 
-selected_patient = "l"
+selected_patient = "i"
 n_pairs = 20
 
 def extract_coords(filename):

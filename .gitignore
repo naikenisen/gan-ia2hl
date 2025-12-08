@@ -10,3 +10,4 @@ wandb/
 venv/
 documents
 torch_cache/
+visualization/

@@ -18,7 +18,7 @@ def compute_tissue_mask(img_rgb):
     return mask
 
 if __name__ == "__main__":
-    folder = "/tmp/data/gold"
+    folder = "/silver/ube/slides"
     svs_files = [f for f in os.listdir(folder) if f.lower().endswith("HES.svs")]
     level = 2
 

@@ -13,6 +13,6 @@ python train.py \
     --lrg 0.0002 \
     --lrd 0.0002 \
     --batch_size 4 \
-    --epochs 100 \
+    --epochs 10 \
     --lambda_l1 10 \
     --model_scale 0.75

@@ -12,13 +12,16 @@ import torch.nn as nn
 from src.models import Generator, Discriminator
 from src.data_loader import train_loader, valid_loader
 import lpips
+import subprocess
 
 wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
+commit = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
 
 wandb.init(
     project="ia2hl-gan",
     name=f"bs{BATCH_SIZE}_scale{MODEL_SCALE}_lambda{LAMBDA}",
     config={
+        "git_commit": commit,
         "batch_size": BATCH_SIZE,
         "epochs": EPOCHS,
         "model_scale": MODEL_SCALE,

@@ -5,22 +5,32 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import sys
+import argparse
 from PIL import Image
-from src.config import device, MODEL_SCALE, CHECKPOINT_DIR, IMG_HEIGHT, IMG_WIDTH
+from src import config
 from torchvision import transforms
 from src.models import Generator
+
+# Parser les arguments
+parser = argparse.ArgumentParser(description='Inference with trained pix2pix GAN')
+parser.add_argument('--img_width', type=int, default=config.DEFAULT_IMG_WIDTH, help='Image width')
+parser.add_argument('--img_height', type=int, default=config.DEFAULT_IMG_HEIGHT, help='Image height')
+parser.add_argument('--model_scale', type=float, default=config.DEFAULT_MODEL_SCALE, help='Model scale factor')
+parser.add_argument('--checkpoint_path', type=str, default='best_models/best_model.pth', help='Path to checkpoint')
+args = parser.parse_args()
+
+device = config.device
 
 hes_train_path = 'inference/original_hes_train.jpg'
 hes_test_path = 'inference/original_hes_test.jpg'
 
 os.makedirs('inference', exist_ok=True)
-generator = Generator(MODEL_SCALE).to(device)
-checkpoint_path = "best_models/best_model.pth"
-checkpoint = torch.load(checkpoint_path, map_location=device)
+generator = Generator(args.model_scale).to(device)
+checkpoint = torch.load(args.checkpoint_path, map_location=device)
 generator.load_state_dict(checkpoint['generator'])
 
 transform = transforms.Compose([
-            transforms.Resize((IMG_HEIGHT, IMG_WIDTH)),
+            transforms.Resize((args.img_height, args.img_width)),
             transforms.ToTensor(),
             transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
         ])

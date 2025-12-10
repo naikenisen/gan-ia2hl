@@ -5,7 +5,6 @@ from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 import random
 import numpy as np
-from src.config import BASE_HES_PATH, BASE_IHC_PATH, IMG_HEIGHT, IMG_WIDTH, BATCH_SIZE
 
 # Random seed pour la reproductibilité
 RANDOM_SEED = 42
@@ -55,37 +54,41 @@ class IHCDataset(Dataset):
         ihc_img = self.transform(ihc_img)
         return hes_img, ihc_img
 
-# Initialiser le seed
-set_seed(RANDOM_SEED)
-
-hes_files, ihc_files = get_image_paths(BASE_HES_PATH, BASE_IHC_PATH)
-
-# Mélanger les données avec le seed
-combined = list(zip(hes_files, ihc_files))
-random.shuffle(combined)
-hes_files, ihc_files = zip(*combined)
-hes_files, ihc_files = list(hes_files), list(ihc_files)
-
-# Split train/validation/test (70%/15%/15%)
-total_size = len(hes_files)
-train_size = int(0.7 * total_size)
-valid_size = int(0.15 * total_size)
-
-train_hes = hes_files[:train_size]
-train_ihc = ihc_files[:train_size]
-
-valid_hes = hes_files[train_size:train_size + valid_size]
-valid_ihc = ihc_files[train_size:train_size + valid_size]
-
-test_hes = hes_files[train_size + valid_size:]
-test_ihc = ihc_files[train_size + valid_size:]
-
-# Créer les datasets
-train_dataset = IHCDataset(train_hes, train_ihc, IMG_HEIGHT, IMG_WIDTH)
-valid_dataset = IHCDataset(valid_hes, valid_ihc, IMG_HEIGHT, IMG_WIDTH)
-test_dataset = IHCDataset(test_hes, test_ihc, IMG_HEIGHT, IMG_WIDTH)
-
-# Créer les dataloaders
-train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, generator=torch.Generator().manual_seed(RANDOM_SEED))
-valid_loader = DataLoader(valid_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=2)
-test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=2)
+# Fonction pour créer les dataloaders
+def create_dataloaders(base_hes_path, base_ihc_path, img_height, img_width, batch_size):
+    # Initialiser le seed
+    set_seed(RANDOM_SEED)
+    
+    hes_files, ihc_files = get_image_paths(base_hes_path, base_ihc_path)
+    
+    # Mélanger les données avec le seed
+    combined = list(zip(hes_files, ihc_files))
+    random.shuffle(combined)
+    hes_files, ihc_files = zip(*combined)
+    hes_files, ihc_files = list(hes_files), list(ihc_files)
+    
+    # Split train/validation/test (70%/15%/15%)
+    total_size = len(hes_files)
+    train_size = int(0.7 * total_size)
+    valid_size = int(0.15 * total_size)
+    
+    train_hes = hes_files[:train_size]
+    train_ihc = ihc_files[:train_size]
+    
+    valid_hes = hes_files[train_size:train_size + valid_size]
+    valid_ihc = ihc_files[train_size:train_size + valid_size]
+    
+    test_hes = hes_files[train_size + valid_size:]
+    test_ihc = ihc_files[train_size + valid_size:]
+    
+    # Créer les datasets
+    train_dataset = IHCDataset(train_hes, train_ihc, img_height, img_width)
+    valid_dataset = IHCDataset(valid_hes, valid_ihc, img_height, img_width)
+    test_dataset = IHCDataset(test_hes, test_ihc, img_height, img_width)
+    
+    # Créer les dataloaders
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2, generator=torch.Generator().manual_seed(RANDOM_SEED))
+    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=2)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=2)
+    
+    return train_loader, valid_loader, test_loader

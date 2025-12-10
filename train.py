@@ -1,6 +1,7 @@
-from src.config import *
+import argparse
 import torch
 import torch.optim as optim
+import torch.nn as nn
 import os
 import time
 import matplotlib.pyplot as plt
@@ -8,48 +9,74 @@ import numpy as np
 from tqdm import tqdm
 from PIL import Image
 import wandb
-import torch.nn as nn
-from src.models import Generator, Discriminator
-from src.data_loader import train_loader, valid_loader
 import lpips
 import subprocess
 
+from src import config
+from src.models import Generator, Discriminator
+from src.data_loader import create_dataloaders
+
+# Parser les arguments de ligne de commande
+parser = argparse.ArgumentParser()
+parser.add_argument('--img_width', type=int, default=config.DEFAULT_IMG_WIDTH, help='Image width')
+parser.add_argument('--img_height', type=int, default=config.DEFAULT_IMG_HEIGHT, help='Image height')
+parser.add_argument('--lrg', type=float, default=config.DEFAULT_LRG, help='Learning rate for generator')
+parser.add_argument('--lrd', type=float, default=config.DEFAULT_LRD, help='Learning rate for discriminator')
+parser.add_argument('--base_hes_path', type=str, default=config.DEFAULT_BASE_HES_PATH, help='Path to HES dataset')
+parser.add_argument('--base_ihc_path', type=str, default=config.DEFAULT_BASE_IHC_PATH, help='Path to IHC dataset')
+parser.add_argument('--checkpoint_dir', type=str, default=config.DEFAULT_CHECKPOINT_DIR, help='Checkpoint directory')
+parser.add_argument('--batch_size', type=int, default=config.DEFAULT_BATCH_SIZE, help='Batch size')
+parser.add_argument('--epochs', type=int, default=config.DEFAULT_EPOCHS, help='Number of epochs')
+parser.add_argument('--lambda_l1', type=float, default=config.DEFAULT_LAMBDA, help='L1 loss weight')
+parser.add_argument('--model_scale', type=float, default=config.DEFAULT_MODEL_SCALE, help='Model scale factor')
+args = parser.parse_args()
+
+# Créer les dataloaders avec les arguments
+train_loader, valid_loader, test_loader = create_dataloaders(
+    args.base_hes_path, 
+    args.base_ihc_path, 
+    args.img_height, 
+    args.img_width, 
+    args.batch_size
+)
+
 wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
 commit = subprocess.check_output(["git", "log", "-1", "--pretty=%B"]).decode().strip()
+best_model_name=f"batch-{args.batch_size}-scale-{args.model_scale}-lambda-{args.lambda_l1}-width-{args.img_width}-lrg-{args.lrg}-lrd-{args.lrd}"
 
 wandb.init(
     project="ia2hl-gan",
-    name=f"batch-{BATCH_SIZE}-scale-{MODEL_SCALE}-lambda-{LAMBDA}-width-{IMG_WIDTH}-lrg-{LRG}-lrd-{LRD}",
+    name=best_model_name,
     config={
         "git_commit": commit,
-        "image_width": IMG_WIDTH,
-        "image_height": IMG_HEIGHT,
-        "batch_size": BATCH_SIZE,
-        "epochs": EPOCHS,
-        "model_scale": MODEL_SCALE,
-        "lambda": LAMBDA,
-        "learning_rate_generator": LRG,
-        "learning_rate_discriminator": LRD,
-        "dataset_hes": BASE_HES_PATH,
-        "dataset_ihc": BASE_IHC_PATH
+        "image_width": args.img_width,
+        "image_height": args.img_height,
+        "batch_size": args.batch_size,
+        "epochs": args.epochs,
+        "model_scale": args.model_scale,
+        "lambda": args.lambda_l1,
+        "learning_rate_generator": args.lrg,
+        "learning_rate_discriminator": args.lrd,
+        "dataset_hes": args.base_hes_path,
+        "dataset_ihc": args.base_ihc_path
     }
 )
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = config.device
 print(f"Using device: {device}")
 
 # ajout des modèles sur le GPU
-generator = Generator(MODEL_SCALE).to(device)
-discriminator = Discriminator(MODEL_SCALE).to(device)
+generator = Generator(args.model_scale).to(device)
+discriminator = Discriminator(args.model_scale).to(device)
 # défnintion des fonctions de loss en utilisant le module nn
 criterion_bce = nn.BCEWithLogitsLoss()
 criterion_l1 = nn.L1Loss()
 # les optimizers prennent les paramètres des deux modèles qu'ils doivent optimiser 
-generator_optimizer = optim.Adam(generator.parameters(), lr=LRG, betas=(0.5, 0.999))
-discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=LRD, betas=(0.5, 0.999))
+generator_optimizer = optim.Adam(generator.parameters(), lr=args.lrg, betas=(0.5, 0.999))
+discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=args.lrd, betas=(0.5, 0.999))
 
 epoch_counter = 1
-best_model_path = os.path.join(CHECKPOINT_DIR, "best_model.pth")  # Meilleur modèle basé sur LPIPS
+best_model_path = os.path.join(args.checkpoint_dir, f'{best_model_name}.pth')  # Meilleur modèle basé sur LPIPS
 best_val_lpips = float('inf')  # Sélection sur LPIPS validation (lower is better)
 
 # Initialize LPIPS model
@@ -66,7 +93,7 @@ def discriminator_loss(disc_real_output, disc_generated_output):
 def generator_loss(disc_generated_output, gen_output, target):
     gan_loss = criterion_bce(disc_generated_output, torch.ones_like(disc_generated_output))
     l1_loss = criterion_l1(gen_output, target)
-    gen_total_loss = gan_loss + (LAMBDA * l1_loss)
+    gen_total_loss = gan_loss + (args.lambda_l1 * l1_loss)
     return gen_total_loss
 
 def train_step(input_image, target):
@@ -153,7 +180,7 @@ def fit(train_loader, valid_loader, start_epoch, epochs):
         # Sauvegarder le meilleur modèle basé sur LPIPS
         if avg_lpips < best_val_lpips:
             best_val_lpips = avg_lpips
-            os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+            os.makedirs(args.checkpoint_dir, exist_ok=True)
             torch.save({
                 'generator': generator.state_dict(),
                 'epoch': epoch,
@@ -191,6 +218,6 @@ def create_loss_plots(epochs, train_gen_loss, val_lpips):
     plt.close()
 
 # Start Training
-fit(train_loader, valid_loader, start_epoch=epoch_counter, epochs=EPOCHS)
+fit(train_loader, valid_loader, start_epoch=epoch_counter, epochs=args.epochs)
 
 wandb.finish()

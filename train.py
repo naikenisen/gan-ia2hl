@@ -15,7 +15,7 @@ import lpips
 import subprocess
 
 wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
-commit = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
+commit = subprocess.check_output(["git", "log", "-1", "--pretty=%B"]).decode().strip()
 
 wandb.init(
     project="ia2hl-gan",

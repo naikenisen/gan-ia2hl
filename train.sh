@@ -14,7 +14,7 @@ python train.py \
     --img_height 256 \
     --lrg 0.0002 \
     --lrd 0.0002 \
-    --batch_size 20 \
-    --epochs 2 \
+    --batch_size 32 \
+    --epochs 100 \
     --lambda_l1 10 \
     --model_scale 0.75

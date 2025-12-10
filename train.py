@@ -16,7 +16,18 @@ import lpips
 wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
 
 wandb.init(
-    project="ia2hl-gan"
+    project="ia2hl-gan",
+    name=f"bs{BATCH_SIZE}_scale{MODEL_SCALE}_lambda{LAMBDA}",
+    config={
+        "batch_size": BATCH_SIZE,
+        "epochs": EPOCHS,
+        "model_scale": MODEL_SCALE,
+        "lambda": LAMBDA,
+        "learning_rate_generator": LRG,
+        "learning_rate_discriminator": LRD,
+        "dataset_hes": BASE_HES_PATH,
+        "dataset_ihc": BASE_IHC_PATH
+    }
 )
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

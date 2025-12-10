@@ -1,5 +1,7 @@
 #!/bin/ksh 
 #$ -q gpu
+#$ -o result.out
+#$ -j y
 #$ -N ia2hl_train
 cd $WORKDIR
 source /beegfs/data/work/imvia/in156281/ia2hl/venv/bin/activate

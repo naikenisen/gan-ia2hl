@@ -2,7 +2,7 @@ import torch
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 BASE_HES_PATH = 'dataset_v2/HES'
 BASE_IHC_PATH = 'dataset_v2/CD30'
-BATCH_SIZE = 16
+BATCH_SIZE = 4
 IMG_WIDTH = 256
 IMG_HEIGHT = 256
 EPOCHS = 100

@@ -19,7 +19,7 @@ commit = subprocess.check_output(["git", "log", "-1", "--pretty=%B"]).decode().s
 
 wandb.init(
     project="ia2hl-gan",
-    name=f"bs{BATCH_SIZE}_scale{MODEL_SCALE}_lambda{LAMBDA}",
+    name=f"batch-{BATCH_SIZE}-scale-{MODEL_SCALE}-lambda-{LAMBDA}",
     config={
         "git_commit": commit,
         "batch_size": BATCH_SIZE,

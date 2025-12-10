@@ -130,7 +130,7 @@ def fit(train_loader, valid_loader, start_epoch, epochs):
 
         # Validation LPIPS à chaque époque
         print("Running LPIPS validation...")
-        avg_lpips = validate_lpips(valid_loader, max_samples=None)  # Utilise tous les échantillons
+        avg_lpips = validate_lpips(valid_loader)
         print(f"Val LPIPS: {avg_lpips:.4f}")
         val_lpips_values.append(avg_lpips)
         

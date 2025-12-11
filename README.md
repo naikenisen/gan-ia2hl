@@ -83,3 +83,9 @@ Supprimer un job
 ```bash
 qdel <job_id>
 ```
+## lancer plusieurs jobs en parallèle avec différents hyperparamètres
+```bash
+bash submit_jobs.sh
+```
+Sachant que le script `submit_jobs.sh` fait appel à config.sh pour lancer le script `train.py` 
+et que les hyperparamètres sont définis dans `config.sh`.

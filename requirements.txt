@@ -8,10 +8,6 @@ seaborn
 scikit-image
 Pillow
 wandb
-opencv-python
 opencv-contrib-python
 openslide-python
 lpips
-pytorch-fid
-scipy
-pytorch-msssim

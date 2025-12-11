@@ -11,24 +11,38 @@ from PIL import Image
 import wandb
 import lpips
 import subprocess
-
 from src import config
 from src.models import Generator, Discriminator
 from src.data_loader import create_dataloaders
 
-# Parser les arguments de ligne de commande
+"""
+Exemple d'utilisation:
+python train.py \
+    --img_width 256 \
+    --img_height 256 \
+    --lrg 0.0002 \
+    --lrd 0.0002 \
+    --base_hes_path dataset_v2/HES \
+    --base_ihc_path dataset_v2/CD30 \
+    --checkpoint_dir best_models \
+    --batch_size 4 \
+    --epochs 100 \
+    --lambda_l1 10 \
+    --model_scale 0.75
+"""
+
 parser = argparse.ArgumentParser()
-parser.add_argument('--img_width', type=int, default=config.DEFAULT_IMG_WIDTH, help='Image width')
-parser.add_argument('--img_height', type=int, default=config.DEFAULT_IMG_HEIGHT, help='Image height')
-parser.add_argument('--lrg', type=float, default=config.DEFAULT_LRG, help='Learning rate for generator')
-parser.add_argument('--lrd', type=float, default=config.DEFAULT_LRD, help='Learning rate for discriminator')
-parser.add_argument('--base_hes_path', type=str, default=config.DEFAULT_BASE_HES_PATH, help='Path to HES dataset')
-parser.add_argument('--base_ihc_path', type=str, default=config.DEFAULT_BASE_IHC_PATH, help='Path to IHC dataset')
-parser.add_argument('--checkpoint_dir', type=str, default=config.DEFAULT_CHECKPOINT_DIR, help='Checkpoint directory')
-parser.add_argument('--batch_size', type=int, default=config.DEFAULT_BATCH_SIZE, help='Batch size')
-parser.add_argument('--epochs', type=int, default=config.DEFAULT_EPOCHS, help='Number of epochs')
-parser.add_argument('--lambda_l1', type=float, default=config.DEFAULT_LAMBDA, help='L1 loss weight')
-parser.add_argument('--model_scale', type=float, default=config.DEFAULT_MODEL_SCALE, help='Model scale factor')
+parser.add_argument('--img_width', type=int, default=config.DEFAULT_IMG_WIDTH)
+parser.add_argument('--img_height', type=int, default=config.DEFAULT_IMG_HEIGHT)
+parser.add_argument('--lrg', type=float, default=config.DEFAULT_LRG)
+parser.add_argument('--lrd', type=float, default=config.DEFAULT_LRD)
+parser.add_argument('--base_hes_path', type=str, default=config.DEFAULT_BASE_HES_PATH)
+parser.add_argument('--base_ihc_path', type=str, default=config.DEFAULT_BASE_IHC_PATH)
+parser.add_argument('--checkpoint_dir', type=str, default=config.DEFAULT_CHECKPOINT_DIR)
+parser.add_argument('--batch_size', type=int, default=config.DEFAULT_BATCH_SIZE)
+parser.add_argument('--epochs', type=int, default=config.DEFAULT_EPOCHS)
+parser.add_argument('--lambda_l1', type=float, default=config.DEFAULT_LAMBDA)
+parser.add_argument('--model_scale', type=float, default=config.DEFAULT_MODEL_SCALE)
 args = parser.parse_args()
 
 # Créer les dataloaders avec les arguments

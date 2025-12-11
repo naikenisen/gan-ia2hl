@@ -13,18 +13,6 @@ from torchvision import transforms
 from src.models import Generator
 from src.data_loader import create_dataloaders
 
-"""
-Exemple d'utilisation:
-python infer.py \
-    --checkpoint_path best_models/best_model.pth \
-    --img_width 256 \
-    --img_height 256 \
-    --batch_size 8 \
-    --model_scale 0.75 \
-    --base_hes_path dataset_v2/HES \
-    --base_ihc_path dataset_v2/CD30
-"""
-
 parser = argparse.ArgumentParser()
 parser.add_argument('--img_width', type=int, default=config.DEFAULT_IMG_WIDTH)
 parser.add_argument('--img_height', type=int, default=config.DEFAULT_IMG_HEIGHT)
@@ -38,7 +26,7 @@ args = parser.parse_args()
 device = config.device
 
 train_loader, valid_loader, test_loader = create_dataloaders(
-    args.base_hes_path, 
+    args.base_hes_path,
     args.base_ihc_path,
     args.img_height,
     args.img_width,

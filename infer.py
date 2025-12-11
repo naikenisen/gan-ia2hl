@@ -12,6 +12,7 @@ from src import config
 from torchvision import transforms
 from src.models import Generator
 from src.data_loader import create_dataloaders
+import lpips
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--img_width', type=int, default=config.DEFAULT_IMG_WIDTH)
@@ -33,20 +34,34 @@ train_loader, valid_loader, test_loader = create_dataloaders(
     args.batch_size
 )
 
+checkpoint_name = os.path.splitext(os.path.basename(args.checkpoint_path))[0]
+os.makedirs(f'inference/{checkpoint_name}', exist_ok=True)
 os.makedirs('inference', exist_ok=True)
 generator = Generator(args.model_scale).to(device)
 checkpoint = torch.load(args.checkpoint_path, map_location=device)
 generator.load_state_dict(checkpoint['generator'])
 
+# Initialiser le modèle LPIPS
+lpips_model = lpips.LPIPS(net='alex').to(device)
+
 generator.eval()
+lpips_model.eval()
 
 print(f"Démarrage de l'inférence sur {len(test_loader)} batches du test set...")
 
 batch_idx = 0
+lpips_values = []
+
 with torch.no_grad():
     for hes_imgs, ihc_imgs in tqdm(test_loader, desc="Inférence", unit="batch"):
         hes_imgs = hes_imgs.to(device)
+        ihc_imgs = ihc_imgs.to(device)
         generated_imgs = generator(hes_imgs)
+        
+        # Calculer LPIPS pour chaque image du batch
+        for i in range(generated_imgs.size(0)):
+            lpips_value = lpips_model(generated_imgs[i:i+1], ihc_imgs[i:i+1])
+            lpips_values.append(lpips_value.item())
         
         # Sauvegarder chaque image du batch
         for i in range(generated_imgs.size(0)):
@@ -82,9 +97,24 @@ with torch.no_grad():
             axes[2].axis('off')
             
             plt.tight_layout()
-            plt.savefig(f'inference/test_{img_id}_comparison.png', dpi=150, bbox_inches='tight')
+            plt.savefig(f'inference/{checkpoint_name}/test_{img_id}_comparison.png', dpi=150, bbox_inches='tight')
             plt.close(fig)
         
         batch_idx += 1
 
-print(f"finish {batch_idx * args.batch_size} images saved")
+mean_lpips = np.mean(lpips_values)
+
+lpips_file_path = f'inference/{checkpoint_name}/lpips_results.txt'
+
+with open(lpips_file_path, 'w') as f:
+    f.write(f"LPIPS Results for {checkpoint_name}\n")
+    f.write(f"{'='*60}\n\n")
+    f.write(f"Mean LPIPS: {mean_lpips:.6f}\n")
+    f.write(f"Total images: {len(lpips_values)}\n\n")
+    f.write(f"{'='*60}\n")
+    f.write(f"Individual LPIPS values:\n")
+    f.write(f"{'='*60}\n\n")
+    for idx, lpips_val in enumerate(lpips_values):
+        f.write(f"Image {idx}: {lpips_val:.6f}\n")
+
+print(f"Finish {batch_idx * args.batch_size} images saved")

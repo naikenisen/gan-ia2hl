@@ -7,6 +7,7 @@ import os
 import sys
 import argparse
 from PIL import Image
+from tqdm import tqdm
 from src import config
 from torchvision import transforms
 from src.models import Generator
@@ -55,7 +56,7 @@ print(f"Démarrage de l'inférence sur {len(test_loader)} batches du test set...
 
 batch_idx = 0
 with torch.no_grad():
-    for hes_imgs, ihc_imgs in test_loader:
+    for hes_imgs, ihc_imgs in tqdm(test_loader, desc="Inférence", unit="batch"):
         hes_imgs = hes_imgs.to(device)
         generated_imgs = generator(hes_imgs)
         
@@ -97,7 +98,5 @@ with torch.no_grad():
             plt.close(fig)
         
         batch_idx += 1
-        if batch_idx % 10 == 0:
-            print(f"Traité {batch_idx}/{len(test_loader)} batches...")
 
-print(f"Inférence terminée! {batch_idx * args.batch_size} images sauvegardées dans le dossier 'inference/'.")
+print(f"finish {batch_idx * args.batch_size} images saved")

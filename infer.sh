@@ -1,5 +1,5 @@
 python infer.py \
-    --checkpoint_path best_models/batch-32-scale-1.0-lambda-10.0-width-256-lrg-0.0002-lrd-0.0002.pth \
+    --checkpoint_path best_models/batch-32-scale-1.0-lambda-15.0-width-256-lrg-0.0002-lrd-0.0002.pth \
     --img_width 256 \
     --img_height 256 \
     --batch_size 32 \

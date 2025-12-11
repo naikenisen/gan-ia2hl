@@ -1,10 +1,10 @@
 {
-  "img_width": [256],
-  "img_height": [256],
-  "lrg": [0.0001, 0.0002],
-  "lrd": [0.0001, 0.0002],
+  "img_width": [1024],
+  "img_height": [1024],
+  "lrg": [0.0001],
+  "lrd": [0.0001],
   "batch_size": [32],
-  "epochs": [100, 150],
+  "epochs": [150, 200],
   "lambda_l1": [10, 15],
-  "model_scale": [0.75, 1]
+  "model_scale": [1, 1.25]
 }

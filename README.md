@@ -92,3 +92,8 @@ alias venv='module load python && source venv/bin/activate
 ```
 
 # Infos pratiques Jean Zay
+
+# Benchmark et métriques
+infer_seul.py génère uniquement les images CD30 virtuelles du test set et les sauvegarde en PNG, avec un nom permettant de conserver l’appariement avec le CD30 réel.
+infer.py génère des images sous forme de triptyques (HES, CD30 réel, CD30 virtuel) pour l’analyse visuelle.
+benchmark.py calcule les métriques (PSNR, SSIM, LPIPS, FID) en comparant les CD30 virtuelles générées aux CD30 réelles du test set, à partir des PNG déjà sauvegardés.

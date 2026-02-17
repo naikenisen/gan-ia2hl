@@ -5,6 +5,7 @@ from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 import random
 import numpy as np
+import glob
 
 # Random seed pour la reproductibilité
 RANDOM_SEED = 42
@@ -22,22 +23,23 @@ def set_seed(seed):
 # fonction pour récupérer les chemins des images hes et IHC
 def get_image_paths(hes_base, ihc_base):
     hes_paths, ihc_paths = [], []
-    for patient_dir in os.listdir(hes_base):
-        patient_hes_path = os.path.join(hes_base, patient_dir)
-        patient_ihc_path = os.path.join(ihc_base, patient_dir)
-        if not os.path.isdir(patient_hes_path): continue
-        # Parcourir directement les images dans le dossier du patient
-        for img_name in os.listdir(patient_hes_path):
-            if img_name.endswith('.jpg'):
-                hes_paths.append(os.path.join(patient_hes_path, img_name))
-                ihc_paths.append(os.path.join(patient_ihc_path, img_name))
+    # Supporte .jpg, .jpeg, .png (insensible à la casse)
+    exts = ('.jpg', '.jpeg', '.png', '.JPG', '.JPEG', '.PNG')
+    hes_files = [f for f in os.listdir(hes_base) if f.endswith(exts)]
+    hes_files.sort()  # pour l'ordre
+    for img_name in hes_files:
+        hes_path = os.path.join(hes_base, img_name)
+        ihc_path = os.path.join(ihc_base, img_name)
+        if os.path.exists(ihc_path):
+            hes_paths.append(hes_path)
+            ihc_paths.append(ihc_path)
     return hes_paths, ihc_paths
 
-# fonction pour prétraiter les images et créer un Dataset personnalisé
 class IHCDataset(Dataset):
     def __init__(self, hes_paths, ihc_paths, img_height, img_width):
         self.hes_paths = hes_paths
         self.ihc_paths = ihc_paths
+        # On définit la transformation ici
         self.transform = transforms.Compose([
             transforms.Resize((img_height, img_width)),
             transforms.ToTensor(),
@@ -50,45 +52,76 @@ class IHCDataset(Dataset):
     def __getitem__(self, idx):
         hes_img = Image.open(self.hes_paths[idx]).convert('RGB')
         ihc_img = Image.open(self.ihc_paths[idx]).convert('RGB')
+        
         hes_img = self.transform(hes_img)
         ihc_img = self.transform(ihc_img)
+        
         return hes_img, ihc_img
 
-# Fonction pour créer les dataloaders
-def create_dataloaders(base_hes_path, base_ihc_path, img_height, img_width, batch_size):
-    # Initialiser le seed
-    set_seed(RANDOM_SEED)
+def get_sorted_files(folder_path):
+    """
+    Récupère tous les fichiers images d'un dossier et les trie
+    pour assurer la correspondance HES <-> CD30.
+    """
+    # On cherche les extensions courantes
+    extensions = ['*.jpg', '*.png', '*.jpeg', '*.tif']
+    files = []
+    for ext in extensions:
+        # recursive=False car on suppose que les images sont directement dans le dossier
+        files.extend(glob.glob(os.path.join(folder_path, ext)))
     
-    hes_files, ihc_files = get_image_paths(base_hes_path, base_ihc_path)
+    # Le tri est INDISPENSABLE pour que l'image HES corresponde à la bonne image CD30
+    return sorted(files)
+
+def create_dataloaders(dataset_root, img_height, img_width, batch_size):
     
-    # Mélanger les données avec le seed
-    combined = list(zip(hes_files, ihc_files))
-    random.shuffle(combined)
-    hes_files, ihc_files = zip(*combined)
-    hes_files, ihc_files = list(hes_files), list(ihc_files)
+    # 1. Définition des chemins
+    # On utilise os.path.join pour être compatible Windows/Linux
+    train_hes_dir = "dataset/train/HES"
+    train_ihc_dir = "dataset/train/CD30"
     
-    # Split train/validation/test (70%/15%/15%)
-    total_size = len(hes_files)
-    train_size = int(0.7 * total_size)
-    valid_size = int(0.15 * total_size)
+    valid_hes_dir = "dataset/valid/HES"
+    valid_ihc_dir = "dataset/valid/CD30"
     
-    train_hes = hes_files[:train_size]
-    train_ihc = ihc_files[:train_size]
+    test_hes_dir = "dataset/test/HES"
+    test_ihc_dir = "dataset/test/CD30"
+
+    # 2. Récupération des fichiers
+    train_hes = get_sorted_files(train_hes_dir)
+    train_ihc = get_sorted_files(train_ihc_dir)
     
-    valid_hes = hes_files[train_size:train_size + valid_size]
-    valid_ihc = ihc_files[train_size:train_size + valid_size]
+    valid_hes = get_sorted_files(valid_hes_dir)
+    valid_ihc = get_sorted_files(valid_ihc_dir)
     
-    test_hes = hes_files[train_size + valid_size:]
-    test_ihc = ihc_files[train_size + valid_size:]
-    
-    # Créer les datasets
+    test_hes = get_sorted_files(test_hes_dir)
+    test_ihc = get_sorted_files(test_ihc_dir)
+
+    # 3. Création des Datasets
     train_dataset = IHCDataset(train_hes, train_ihc, img_height, img_width)
     valid_dataset = IHCDataset(valid_hes, valid_ihc, img_height, img_width)
     test_dataset = IHCDataset(test_hes, test_ihc, img_height, img_width)
     
-    # Créer les dataloaders
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2, generator=torch.Generator().manual_seed(RANDOM_SEED))
-    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=2)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=2)
+    # 4. Création des Dataloaders
+    train_loader = DataLoader(
+        train_dataset, 
+        batch_size=batch_size, 
+        shuffle=True,  # Important pour le train
+        num_workers=2,
+        pin_memory=True
+    )
+    
+    valid_loader = DataLoader(
+        valid_dataset, 
+        batch_size=batch_size, 
+        shuffle=False, 
+        num_workers=2
+    )
+    
+    test_loader = DataLoader(
+        test_dataset, 
+        batch_size=batch_size, 
+        shuffle=False, 
+        num_workers=2
+    )
     
     return train_loader, valid_loader, test_loader

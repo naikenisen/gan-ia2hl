@@ -120,12 +120,22 @@ def infer_testset_only(
             # Save each generated image with name derived from real IHC filename
             for i in range(y_hat.size(0)):
                 real_path = ihc_paths[i]
+
+                # Nom du patch (ex: 1234_5678)
                 real_base = os.path.splitext(os.path.basename(real_path))[0]
 
-                # Example output name: <realname>_VIRTUAL.png
-                out_name = f"{real_base}_VIRTUAL.png"
-                out_path = os.path.join(save_dir, out_name)
+                # Récupère la lame (c/e/i/j/l)
+                slide_id = os.path.basename(os.path.dirname(real_path))
 
+                # Crée un sous-dossier pour cette lame
+                slide_out_dir = os.path.join(save_dir, slide_id)
+                os.makedirs(slide_out_dir, exist_ok=True)
+
+                # Nom final du fichier
+                out_name = f"{real_base}_VIRTUAL.png"
+                out_path = os.path.join(slide_out_dir, out_name)
+
+                # Sauvegarde
                 img = (y_hat[i].detach().cpu().permute(1, 2, 0).numpy() * 255.0).astype(np.uint8)
                 Image.fromarray(img).save(out_path)
 

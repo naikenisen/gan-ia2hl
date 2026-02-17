@@ -91,4 +91,12 @@ alias venv='module load python && source venv/bin/activate
                                && export WANDB_CONFIG_DIR=/work/imvia/in156281/.config/wandb'
 ```
 
+
+
 # Infos pratiques Jean Zay
+
+# ajout d'une branche distante 
+git pull
+git fetch origine
+git checkout --track origin/cache
+```

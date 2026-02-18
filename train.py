@@ -29,33 +29,13 @@ model_scale = config.MODEL_SCALE
 
 # Créer les dataloaders avec les arguments
 train_loader, valid_loader, test_loader = create_dataloaders(
-    'dataset',
     img_height,
     img_width,
     batch_size
 )
 
-wandb.login(key="ab67e0f4c27fad7a0d47405f84a8a4deb80056ba")
 commit = subprocess.check_output(["git", "log", "-1", "--pretty=%B"]).decode().strip()
 best_model_name=f"batch-{batch_size}-scale-{model_scale}-lambda-{lambda_l1}-width-{img_width}-lrg-{lrg}-lrd-{lrd}"
-
-wandb.init(
-    project="ia2hl-gan",
-    name=best_model_name,
-    config={
-        "git_commit": commit,
-        "image_width": img_width,
-        "image_height": img_height,
-        "batch_size": batch_size,
-        "epochs": epochs,
-        "model_scale": model_scale,
-        "lambda": lambda_l1,
-        "learning_rate_generator": lrg,
-        "learning_rate_discriminator": lrd,
-        "dataset_hes": base_hes_path,
-        "dataset_ihc": base_ihc_path
-    }
-)
 
 device = config.device
 print(f"Using device: {device}")
@@ -214,5 +194,3 @@ def create_loss_plots(epochs, train_gen_loss, val_lpips):
 
 # Start Training
 fit(train_loader, valid_loader, start_epoch=epoch_counter, epochs=epochs)
-
-wandb.finish()

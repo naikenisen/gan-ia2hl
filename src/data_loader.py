@@ -73,7 +73,7 @@ def get_sorted_files(folder_path):
     # Le tri est INDISPENSABLE pour que l'image HES corresponde à la bonne image CD30
     return sorted(files)
 
-def create_dataloaders(dataset_root, img_height, img_width, batch_size):
+def create_dataloaders(img_height, img_width, batch_size):
     
     # 1. Définition des chemins
     # On utilise os.path.join pour être compatible Windows/Linux

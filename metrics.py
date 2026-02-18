@@ -34,8 +34,30 @@ def list_image_files(directory, exts=(".jpg", ".png")):
         if os.path.splitext(f)[1].lower() in exts
     ])
 
+
+# Apparier les images par nom de base (sans extension ni _VIRTUAL)
 ihc_files = list_image_files(ihc_dir, exts=(".jpg",))
 inference_files = list_image_files(inference_dir, exts=(".png",))
+
+# Créer un dict {base_name: path} pour les virtuels
+def get_base_name(path, virtual=False):
+    name = os.path.splitext(os.path.basename(path))[0]
+    if virtual and name.endswith('_VIRTUAL'):
+        name = name[:-8]
+    return name
+
+virtual_dict = {get_base_name(f, virtual=True): f for f in inference_files}
+
+# Apparier chaque image réelle à son virtuel par nom de base
+paired_files = []
+for real_path in ihc_files:
+    base = get_base_name(real_path)
+    virt_path = virtual_dict.get(base)
+    if virt_path:
+        paired_files.append((real_path, virt_path))
+
+ihc_files = [r for r, v in paired_files]
+inference_files = [v for r, v in paired_files]
 
 # Main benchmarking function
 def benchmark(img_width, img_height, lpips_net, seed, img_range, virtual_dir, ihc_files, inference_files):

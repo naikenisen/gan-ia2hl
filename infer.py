@@ -16,8 +16,8 @@ import re
 import csv
 
 
-test_hes_path = "dataset/test/HES"
-test_ihc_path = "dataset/test/CD30"
+test_hes_path = "dataset_tiled_512/test/HES"
+test_ihc_path = "dataset_tiled_512/test/CD30"
 img_width = config.IMG_WIDTH
 img_height = config.IMG_HEIGHT
 batch_size = 32

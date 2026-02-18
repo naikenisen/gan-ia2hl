@@ -77,14 +77,14 @@ def create_dataloaders(img_height, img_width, batch_size):
     
     # 1. Définition des chemins
     # On utilise os.path.join pour être compatible Windows/Linux
-    train_hes_dir = "dataset_tiled_512/train/HES"
-    train_ihc_dir = "dataset_tiled_512/train/CD30"
+    train_hes_dir = "dataset/train/HES"
+    train_ihc_dir = "dataset/train/CD30"
     
-    valid_hes_dir = "dataset_tiled_512/valid/HES"
-    valid_ihc_dir = "dataset_tiled_512/valid/CD30"
+    valid_hes_dir = "dataset/valid/HES"
+    valid_ihc_dir = "dataset/valid/CD30"
     
-    test_hes_dir = "dataset_tiled_512/test/HES"
-    test_ihc_dir = "dataset_tiled_512/test/CD30"
+    test_hes_dir = "dataset/test/HES"
+    test_ihc_dir = "dataset/test/CD30"
 
     # 2. Récupération des fichiers
     train_hes = get_sorted_files(train_hes_dir)

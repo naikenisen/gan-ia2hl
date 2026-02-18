@@ -1,7 +1,5 @@
 import torch
 import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
 import numpy as np
 import os
 import sys
@@ -11,110 +9,106 @@ from tqdm import tqdm
 from src import config
 from torchvision import transforms
 from src.models import Generator
-from src.data_loader import create_dataloaders
+from src.data_loader import create_dataloaders, get_image_paths, set_seed, RANDOM_SEED
 import lpips
+import random
+import re
+import csv
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--img_width', type=int, default=config.DEFAULT_IMG_WIDTH)
-parser.add_argument('--img_height', type=int, default=config.DEFAULT_IMG_HEIGHT)
-parser.add_argument('--model_scale', type=float, default=config.DEFAULT_MODEL_SCALE)
-parser.add_argument('--base_hes_path', type=str, default=config.DEFAULT_BASE_HES_PATH)
-parser.add_argument('--base_ihc_path', type=str, default=config.DEFAULT_BASE_IHC_PATH)
-parser.add_argument('--batch_size', type=int, default=config.DEFAULT_BATCH_SIZE)
-parser.add_argument('--checkpoint_path', type=str, default='best_models/best_model.pth')
-args = parser.parse_args()
+
+test_hes_path = "dataset_tiled_512/test/HES"
+test_ihc_path = "dataset_tiled_512/test/CD30"
+img_width = config.IMG_WIDTH
+img_height = config.IMG_HEIGHT
+batch_size = 32
+checkpoint_path = "best_models/batch-32-scale-1-lambda-10-width-256-lrg-0.0001-lrd-0.0001.pth"
+out_dir = "inference"
+img_range = "[-1, 1]"
+num_workers = 0
+
 
 device = config.device
 
-train_loader, valid_loader, test_loader = create_dataloaders(
-    args.base_hes_path,
-    args.base_ihc_path,
-    args.img_height,
-    args.img_width,
-    args.batch_size
-)
+# On ne travaille que sur le dossier test
+test_hes, test_ihc = get_image_paths(test_hes_path, test_ihc_path)
+print(f"Fichiers HES trouvés : {len(test_hes)}")
+print(f"Fichiers CD30 trouvés : {len(test_ihc)}")
+if len(test_hes) > 0:
+    print("Exemple HES:", test_hes[0])
+if len(test_ihc) > 0:
+    print("Exemple CD30:", test_ihc[0])
+n_test = len(test_hes)
 
-checkpoint_name = os.path.splitext(os.path.basename(args.checkpoint_path))[0]
-os.makedirs(f'inference/{checkpoint_name}', exist_ok=True)
-os.makedirs('inference', exist_ok=True)
-generator = Generator(args.model_scale).to(device)
-checkpoint = torch.load(args.checkpoint_path, map_location=device)
-generator.load_state_dict(checkpoint['generator'])
+# Dataset simple pour test
+from torch.utils.data import Dataset, DataLoader
+tfm = transforms.Compose([
+    transforms.Resize((img_height, img_width)),
+    transforms.ToTensor(),
+    transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+])
 
-# Initialiser le modèle LPIPS
-lpips_model = lpips.LPIPS(net='alex').to(device)
+class TestPairedDataset(Dataset):
+    def __init__(self, hes_list, ihc_list):
+        self.hes_list = hes_list
+        self.ihc_list = ihc_list
+    def __len__(self):
+        return len(self.hes_list)
+    def __getitem__(self, idx):
+        hes = Image.open(self.hes_list[idx]).convert("RGB")
+        ihc = Image.open(self.ihc_list[idx]).convert("RGB")
+        return tfm(hes), tfm(ihc), self.ihc_list[idx]
 
-generator.eval()
-lpips_model.eval()
+test_ds = TestPairedDataset(test_hes, test_ihc)
+test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
-print(f"Démarrage de l'inférence sur {len(test_loader)} batches du test set...")
+# --- Load model ---
+# Option: infer model_scale from ckpt filename if you want
+match = re.search(r"scale-([0-9.]+)", os.path.basename(checkpoint_path))
+model_scale = float(match.group(1)) if match else config.MODEL_SCALE
 
-batch_idx = 0
-lpips_values = []
+gen = Generator(model_scale=model_scale).to(device)
+state = torch.load(checkpoint_path, map_location="cpu")
 
+if isinstance(state, dict) and "generator" in state:
+    state = state["generator"]
+
+gen.load_state_dict(state)
+gen.eval()
+
+# --- Output dirs ---
+ckpt_name = os.path.splitext(os.path.basename(checkpoint_path))[0]
+save_dir = out_dir
+os.makedirs(save_dir, exist_ok=True)
+
+# --- Inference ---
+print(f"Inference on test set: {n_test} images -> {save_dir}")
+
+rows = []
 with torch.no_grad():
-    for hes_imgs, ihc_imgs in tqdm(test_loader, desc="Inférence", unit="batch"):
-        hes_imgs = hes_imgs.to(device)
-        ihc_imgs = ihc_imgs.to(device)
-        generated_imgs = generator(hes_imgs)
-        
-        # Calculer LPIPS pour chaque image du batch
-        for i in range(generated_imgs.size(0)):
-            lpips_value = lpips_model(generated_imgs[i:i+1], ihc_imgs[i:i+1])
-            lpips_values.append(lpips_value.item())
-        
-        # Sauvegarder chaque image du batch
-        for i in range(generated_imgs.size(0)):
-            # Image générée
-            generated_img_np = generated_imgs[i].cpu().numpy()
-            generated_img_denorm = ((generated_img_np * 0.5 + 0.5) * 255.0).astype(np.uint8)
-            generated_img_hwc = np.transpose(generated_img_denorm, (1, 2, 0))
-            
-            # Image HES originale
-            hes_img_np = hes_imgs[i].cpu().numpy()
-            hes_img_denorm = ((hes_img_np * 0.5 + 0.5) * 255.0).astype(np.uint8)
-            hes_img_hwc = np.transpose(hes_img_denorm, (1, 2, 0))
-            
-            # Image IHC cible (ground truth)
-            ihc_img_np = ihc_imgs[i].cpu().numpy()
-            ihc_img_denorm = ((ihc_img_np * 0.5 + 0.5) * 255.0).astype(np.uint8)
-            ihc_img_hwc = np.transpose(ihc_img_denorm, (1, 2, 0))
-            
-            # Créer une figure avec les 3 images côte à côte
-            img_id = batch_idx * args.batch_size + i
-            fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-            
-            axes[0].imshow(hes_img_hwc)
-            axes[0].set_title('HES Original', fontsize=12)
-            axes[0].axis('off')
-            
-            axes[1].imshow(generated_img_hwc)
-            axes[1].set_title('IHC Généré', fontsize=12)
-            axes[1].axis('off')
-            
-            axes[2].imshow(ihc_img_hwc)
-            axes[2].set_title('IHC Target', fontsize=12)
-            axes[2].axis('off')
-            
-            plt.tight_layout()
-            plt.savefig(f'inference/{checkpoint_name}/test_{img_id}_comparison.png', dpi=150, bbox_inches='tight')
-            plt.close(fig)
-        
-        batch_idx += 1
+    for hes_imgs, ihc_imgs, ihc_paths in tqdm(test_loader, desc="Infer", unit="batch"):
+        hes_imgs = hes_imgs.to(device, non_blocking=True)
+        y_hat = gen(hes_imgs)
 
-mean_lpips = np.mean(lpips_values)
+        # Convert to [0,1] for saving
+        if img_range == "[-1, 1]":
+            y_hat = (y_hat + 1) / 2
+        elif img_range == "[0, 1]":
+            pass
+        else:
+            raise ValueError("img_range must be '[-1, 1]' or '[0, 1]'")
 
-lpips_file_path = f'inference/{checkpoint_name}/lpips_results.txt'
+        y_hat = y_hat.clamp(0, 1)
 
-with open(lpips_file_path, 'w') as f:
-    f.write(f"LPIPS Results for {checkpoint_name}\n")
-    f.write(f"{'='*60}\n\n")
-    f.write(f"Mean LPIPS: {mean_lpips:.6f}\n")
-    f.write(f"Total images: {len(lpips_values)}\n\n")
-    f.write(f"{'='*60}\n")
-    f.write(f"Individual LPIPS values:\n")
-    f.write(f"{'='*60}\n\n")
-    for idx, lpips_val in enumerate(lpips_values):
-        f.write(f"Image {idx}: {lpips_val:.6f}\n")
-
-print(f"Finish {batch_idx * args.batch_size} images saved")
+        # Save each generated image with name derived from real IHC filename
+        for i in range(y_hat.size(0)):
+            real_path = ihc_paths[i]
+            real_base = os.path.splitext(os.path.basename(real_path))[0]
+            slide_id = os.path.basename(os.path.dirname(real_path))
+            slide_out_dir = os.path.join(save_dir, slide_id)
+            os.makedirs(slide_out_dir, exist_ok=True)
+            out_name = f"{real_base}_VIRTUAL.png"
+            out_path = os.path.join(slide_out_dir, out_name)
+            img = (y_hat[i].detach().cpu().permute(1, 2, 0).numpy() * 255.0).astype(np.uint8)
+            Image.fromarray(img).save(out_path)
+            rows.append([real_path, out_path])
+print(f"Done. Saved {len(rows)} virtual images.")

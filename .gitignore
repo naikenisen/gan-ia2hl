@@ -14,3 +14,6 @@ dataset_v1/
 dataset_v2/
 inference-
 /dataset_gan_ia2hl
+dataset
+dataset_tiled_512
+inference_old

@@ -96,6 +96,7 @@ alias venv='module load python && source venv/bin/activate
 # Infos pratiques Jean Zay
 
 # ajout d'une branche distante
+
 ```bash
 
 git pull

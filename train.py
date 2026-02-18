@@ -29,10 +29,9 @@ model_scale = config.MODEL_SCALE
 
 # Créer les dataloaders avec les arguments
 train_loader, valid_loader, test_loader = create_dataloaders(
-    base_hes_path, 
-    base_ihc_path, 
-    img_height, 
-    img_width, 
+    'dataset',
+    img_height,
+    img_width,
     batch_size
 )
 

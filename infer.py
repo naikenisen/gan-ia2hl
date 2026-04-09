@@ -16,13 +16,13 @@ import re
 import csv
 
 
-test_hes_path = "dataset/test/HES"
-test_ihc_path = "dataset/test/CD30"
+test_hes_path = "/work/imvia/in156281/cDDPMv2/dataset/test/HES"
+test_ihc_path = "/work/imvia/in156281/cDDPMv2/dataset/test/CD30"
 img_width = config.IMG_WIDTH
 img_height = config.IMG_HEIGHT
 batch_size = 32
 checkpoint_path = "best_models/batch-32-scale-1-lambda-10-width-256-lrg-0.0001-lrd-0.0001.pth"
-out_dir = "inference"
+out_dir = "/work/imvia/in156281/cDDPMv2/dataset/test/virtual_cd30_GAN512"
 img_range = "[-1, 1]"
 num_workers = 0
 
